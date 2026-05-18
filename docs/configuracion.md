@@ -1,4 +1,4 @@
-# Generalized Evolution Strategies for Mixed-Variable Optimization
+# Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
 ## Configuration and Hyperparameters
 
@@ -118,10 +118,10 @@ The most common parameters can be overridden from the command line without modif
 
 ```bash
 # Change generations
-python -m src.cli.runner model --generations 1000
+python -m src.es_model.main model --generations 1000
 
 # Change log interval
-python -m src.cli.runner model --log-interval 50
+python -m src.es_model.main model --log-interval 50
 ```
 
 For deeper changes (μ, λ, bounds, and so on), edit `src/es_model/config.py` directly.

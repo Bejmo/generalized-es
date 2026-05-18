@@ -1,3 +1,12 @@
 .venv
 .github
 openspec
+
+# Python cache artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+**/*.py[cod]
+
+# Local runtime logs
+report.log

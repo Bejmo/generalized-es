@@ -1,4 +1,4 @@
-# Generalized Evolution Strategies for Mixed-Variable Optimization
+# Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
 ## ES Architecture
 

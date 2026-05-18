@@ -1,4 +1,4 @@
-# Generalized Evolution Strategies for Mixed-Variable Optimization
+# Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
 Prototype of a **Heterogeneous Evolution Strategy** with (μ, λ) / (μ + λ) selection and log-normal self-adaptation. It includes a comparison framework against reference optimizers (Differential Evolution, PSO, and (1+1)-ES with the 1/5 rule).
 
@@ -33,31 +33,50 @@ pip install -r requirements.txt
 
 Run all commands from the **project root** with the virtual environment activated.
 
-### Unified CLI
+### Recommended Usage
 
-| Command | Description |
-|---------|-------------|
-| `python -m src.cli.runner model` | Runs the heterogeneous ES optimization loop |
-| `python -m src.cli.runner benchmarks` | Runs algorithm comparison on benchmark functions |
-| `python -m src.cli.runner smoke` | Runs a quick smoke validation |
-| `python -m src.cli.runner all` | Runs model + benchmarks sequentially |
-
-### Common Options
+The interactive menu is the recommended way to run the project. It is the simplest option for normal use and lets you choose the workflow directly from `main.py`.
 
 ```bash
-# Model run with custom generations
-python -m src.cli.runner model --generations 200 --log-interval 20
+python -m src.es_model.main
+```
+
+Available menu options:
+
+- `model`: runs the heterogeneous ES optimization loop with the model configuration.
+- `benchmarks`: runs the benchmark comparison against the reference optimizers.
+- `smoke`: runs a short validation of model + benchmarks with small default values.
+- `all`: runs the full model workflow first and then the benchmark workflow.
+- `exit`: closes the program without running anything.
+
+When you choose `model`, `benchmarks`, `smoke`, or `all`, `main.py` asks for the most relevant parameters and applies defaults if you just press Enter.
+
+### Direct Command Alternatives
+
+If you want to skip the menu or launch a run with fixed parameters, you can still use direct commands:
+
+```bash
+# Direct model run with custom generations
+python -m src.es_model.main model --generations 200 --log-interval 20
 
 # Benchmarks with custom dimension and evaluation budget
-python -m src.cli.runner benchmarks --dim 20 --max-evals 50000 --seeds 5
+python -m src.es_model.main benchmarks --dim 20 --max-evals 50000 --seeds 5
 
 # Fast smoke test
-python -m src.cli.runner smoke --dim 5 --max-evals 200 --seeds 2
+python -m src.es_model.main smoke --dim 5 --max-evals 200 --seeds 2
 ```
 
 ### Interactive Notebook
 
-Open `experiments/notebooks/benchmark_comparison.ipynb` in VS Code or Jupyter and select the `.venv` kernel.
+Open `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb` in VS Code or Jupyter and select the `.venv` kernel.
+
+### Named Experiments
+
+- **Experiment 1: Equal-Budget Benchmark Comparison**
+	- Notebook: `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb`
+	- Goal: compare Custom ES against Differential Evolution, PSO, and (1+1)-ES under the same evaluation budget.
+	- Protocol: real-valued benchmark block, 10 seeds, fixed `MAX_EVALS` per runner.
+	- Output: convergence plots and final median fitness summary per benchmark.
 
 ---
 
@@ -70,11 +89,7 @@ TFG/
 │   │   ├── config.py           #     Centralized hyperparameters
 │   │   ├── kernels.py          #     Vectorized mutation kernels
 │   │   ├── engine.py           #     Population dynamics and selection
-│   │   └── main.py             #     Executable optimization loop
-│   ├── cli/                    #   Command-line interface
-│   │   ├── runner.py           #     Unified CLI entry point
-│   │   ├── model_runner.py     #     ES model workflow
-│   │   └── benchmark_runner.py #     Benchmark workflow
+│   │   └── main.py             #     Single terminal entrypoint + model loop
 │   └── experiments/            #   Experiment modules and helper runners
 │       ├── benchmarks/         #     Objective functions (Sphere, Rastrigin...)
 │       └── runners/            #     Reference algorithm wrappers
@@ -109,6 +124,17 @@ For implementation details, architecture, and algorithms, see [docs/](docs/):
 
 ---
 
+## Migration Note
+
+Old commands using `python -m src.cli.runner ...` were retired.
+
+Use:
+
+- `python -m src.es_model.main` (interactive menu)
+- `python -m src.es_model.main <mode>` for direct mode execution
+
+---
+
 ## License
 
-Academic project - Generalized Evolution Strategies for Mixed-Variable Optimization.
+Academic project - Heterogeneous Evolution Strategies for Mixed-Variable Optimization.

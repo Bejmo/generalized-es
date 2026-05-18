@@ -1,4 +1,4 @@
-# Generalized Evolution Strategies for Mixed-Variable Optimization
+# Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
 ## Benchmark Framework
 
@@ -74,10 +74,10 @@ Classic baseline:
 
 ```bash
 # Default configuration
-python -m src.cli.runner benchmarks
+python -m src.es_model.main benchmarks
 
 # Customized
-python -m src.cli.runner benchmarks --dim 20 --max-evals 50000 --seeds 30
+python -m src.es_model.main benchmarks --dim 20 --max-evals 50000 --seeds 30
 ```
 
 ---
@@ -117,7 +117,7 @@ The trace always has length `max_evals`. If the algorithm finishes early, it is 
 
 ## Analysis Notebook
 
-`experiments/notebooks/benchmark_comparison.ipynb` provides:
+`experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb` provides:
 
 1. Interactive execution of all runners
 2. Convergence plots (matplotlib) per benchmark function
