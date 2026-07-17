@@ -1,7 +1,5 @@
-"""
-engine.py — Population dynamics, selection policies, and structural invariants.
-
-Defines the Individual data class, offspring cloning, deterministic rank-based
+﻿"""
+Defines the Individual data class, child cloning, deterministic rank-based
 survivor selection for both (mu, lambda) and (mu + lambda) modes, and the
 flattened genome output contract.
 """
@@ -15,37 +13,35 @@ from . import config as cfg
 from . import kernels
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 1. Individual Data Structure
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 @dataclass
 class Individual:
     """
     A single candidate solution in the heterogeneous ES.
-
-    Contains typed genome blocks and their associated strategy parameters.
     Strategy parameters co-evolve with the genome via self-adaptation.
     """
 
-    # ── Decision Variable Blocks ──────────────────────────────────────────
+    # -- Decision Variable Blocks ------------------------------------------
     real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     count: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     binary: NDArray[np.uint8] = field(default_factory=lambda: np.zeros(0, dtype=np.uint8))
     categorical: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
 
-    # ── Strategy Parameters ───────────────────────────────────────────────
+    # -- Strategy Parameters -----------------------------------------------
     sigma_real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     lambda_count: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     sigma_fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_binary: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_cat: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
 
-    # ── Fitness ───────────────────────────────────────────────────────────
+    # -- Fitness -----------------------------------------------------------
     fitness: float = float("inf")
 
-    # ─────────────────────────────────────────────────────────────────────
+    # ---------------------------------------------------------------------
     @property
     def genome(self) -> NDArray[np.float64]:
         """
@@ -64,9 +60,9 @@ class Individual:
         ])
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 2. Random Initialization
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def create_random_individual(rng: np.random.Generator) -> Individual:
     """Create a randomly initialized individual within configured bounds."""
@@ -101,15 +97,15 @@ def _random_fuzzy_points(rng: np.random.Generator) -> NDArray[np.float64]:
     return points
 
 
-# =============================================================================
-# 3. Deep-Copy-Safe Offspring Cloning
-# =============================================================================
+# -----------------------------------------------------------------------------
+# 3. Deep-Copy-Safe Child Cloning
+# -----------------------------------------------------------------------------
 
 def clone_individual(parent: Individual) -> Individual:
     """
     Create a fully independent deep copy of a parent individual.
 
-    All NumPy arrays are copied so that mutations on the offspring
+    All NumPy arrays are copied so that mutations on the child
     do not affect the parent's state.
     """
     return Individual(
@@ -127,34 +123,34 @@ def clone_individual(parent: Individual) -> Individual:
     )
 
 
-# =============================================================================
-# 4. Offspring Mutation Pipeline
-# =============================================================================
+# -----------------------------------------------------------------------------
+# 4. Child Mutation Pipeline
+# -----------------------------------------------------------------------------
 
 def mutate_individual(ind: Individual, rng: np.random.Generator) -> None:
     """
-    Apply the full self-adaptive mutation pipeline to an individual IN-PLACE.
+    Apply self-adaptive mutation.
 
     Steps:
     1. Generate sparse masks per block.
     2. Adapt strategy parameters (log-normal for scales, logit-normal for probs).
     3. Mutate decision variables using adapted strategies.
     """
-    # ── Sparse Masks ──────────────────────────────────────────────────────
+    # Sparse Masks
     mask_real = kernels.generate_sparse_mask(cfg.N_REAL, rng)
     mask_count = kernels.generate_sparse_mask(cfg.N_COUNT, rng)
     mask_binary = kernels.generate_sparse_mask(cfg.N_BINARY, rng)
     mask_cat = kernels.generate_sparse_mask(cfg.N_CATEGORICAL, rng)
     mask_fuzzy = kernels.generate_sparse_mask(cfg.N_FUZZY, rng)
 
-    # ── Adapt Strategies ──────────────────────────────────────────────────
+    # Adapt Strategies
     ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng, mask_real)
     ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng, mask_count)
     ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, _expand_fuzzy_mask(mask_fuzzy))
     ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, mask_binary)
     ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, mask_cat)
 
-    # ── Mutate Decision Variables ─────────────────────────────────────────
+    # Mutate Decision Variables
     ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng, mask_real)
     ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng, mask_count)
     ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng, mask_binary)
@@ -167,13 +163,13 @@ def _expand_fuzzy_mask(mask_per_var: NDArray[np.bool_]) -> NDArray[np.bool_]:
     return np.repeat(mask_per_var, 3)
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 5. Deterministic Rank-Based Survivor Selection
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def select_survivors(
     parents: list[Individual],
-    offspring: list[Individual],
+    child: list[Individual],
     mode: str = cfg.SELECTION_MODE,
 ) -> list[Individual]:
     """
@@ -183,11 +179,11 @@ def select_survivors(
     ----------
     parents : list of Individual
         Current parent population.
-    offspring : list of Individual
-        Newly generated offspring.
+    child : list of Individual
+        Newly generated child.
     mode : str
-        "comma" — select from offspring only.
-        "plus"  — select from parents + offspring combined.
+        "comma" — select from child only.
+        "plus"  — select from parents + child combined.
 
     Returns
     -------
@@ -200,9 +196,9 @@ def select_survivors(
     guaranteeing reproducible selection across runs.
     """
     if mode == "comma":
-        pool = offspring
+        pool = child
     elif mode == "plus":
-        pool = parents + offspring
+        pool = parents + child
     else:
         raise ValueError(f"Unknown selection mode: {mode!r}. Use 'comma' or 'plus'.")
 

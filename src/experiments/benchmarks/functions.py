@@ -1,9 +1,8 @@
 """
-Benchmark objective functions and catalog for optimization experiments.
+Benchmark functions.
 """
 
 import numpy as np
-
 
 def sphere(x):
     return float(np.sum(x ** 2))
@@ -24,10 +23,11 @@ def ackley(x):
     sum_cos = np.sum(np.cos(2.0 * np.pi * x)) / n
     return float(-20.0 * np.exp(-0.2 * np.sqrt(sum_sq)) - np.exp(sum_cos) + 20.0 + np.e)
 
-
+# @TODO Change the limit
+limit = 10.0
 BENCHMARKS = {
-    'Sphere':     {'fn': sphere,     'bounds': (-5.12, 5.12), 'optimum': np.zeros},
-    'Rastrigin':  {'fn': rastrigin,  'bounds': (-5.12, 5.12), 'optimum': np.zeros},
-    'Rosenbrock': {'fn': rosenbrock, 'bounds': (-5.0, 10.0),  'optimum': np.ones},
-    'Ackley':     {'fn': ackley,     'bounds': (-5.0, 5.0),   'optimum': np.zeros},
+    'Sphere':     {'fn': sphere,     'bounds': (-limit, limit), 'optimum': np.zeros},
+    'Rastrigin':  {'fn': rastrigin,  'bounds': (-limit, limit), 'optimum': np.zeros},
+    'Rosenbrock': {'fn': rosenbrock, 'bounds': (-limit, limit),  'optimum': np.ones},
+    'Ackley':     {'fn': ackley,     'bounds': (-5.0, 5.0),   'optimum': np.zeros}, # Limit must be (-5,5), otherwise the function is not defined at the optimum.
 }

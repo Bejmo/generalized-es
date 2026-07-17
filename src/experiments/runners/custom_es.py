@@ -42,7 +42,7 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, **kwargs) -> np.nda
         if len(trace) >= max_evals:
             break
     while len(trace) < max_evals:
-        offspring = []
+        childs = []
         for _ in range(lam):
             parent_idx = rng.integers(0, mu)
             child = clone_individual(parents[parent_idx])
@@ -50,10 +50,10 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, **kwargs) -> np.nda
             child.fitness = fn(child.real)
             best_so_far = min(best_so_far, child.fitness)
             trace.append(best_so_far)
-            offspring.append(child)
+            childs.append(child)
             if len(trace) >= max_evals:
                 break
-        parents = select_survivors(parents, offspring)
+        parents = select_survivors(parents, childs)
 
     (cfg.N_REAL, cfg.N_COUNT, cfg.N_BINARY, cfg.N_CATEGORICAL, cfg.N_FUZZY,
      cfg.REAL_BOUNDS, cfg.N_TOTAL, cfg.MU, cfg.LAMBDA, cfg.CATEGORICAL_K) = orig

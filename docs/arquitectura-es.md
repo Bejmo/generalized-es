@@ -17,7 +17,7 @@ Single source of truth for all hyperparameters:
 | Parameter | Default Value | Description |
 |-----------|---------------|-------------|
 | `MU` | 15 | Survivors per generation |
-| `LAMBDA` | 100 | Offspring generated per generation |
+| `LAMBDA` | 100 | Child generated per generation |
 | `SELECTION_MODE` | `"comma"` | `"comma"` = (μ,λ) / `"plus"` = (μ+λ) |
 | `MAX_GENERATIONS` | 500 | Maximum generations |
 | `SPARSE_RATE` | 0.7 | Activation probability per dimension |
@@ -99,8 +99,8 @@ class Individual:
 
 #### Selection
 
-- **Comma mode (μ, λ):** Survivors are selected only from λ offspring.
-- **Plus mode (μ + λ):** Survivors are selected from the combined parents + offspring pool.
+- **Comma mode (μ, λ):** Survivors are selected only from λ child.
+- **Plus mode (μ + λ):** Survivors are selected from the combined parents + child pool.
 
 ---
 
@@ -112,8 +112,8 @@ Implements the complete generational cycle:
 1. Initialize μ random parents
 2. Evaluate fitness
 3. For each generation:
-   a. Generate λ offspring (clone random parent + mutate)
-   b. Evaluate offspring
+    a. Generate λ child (clone random parent + mutate)
+    b. Evaluate child
    c. Select μ survivors
    d. Log convergence every LOG_INTERVAL generations
 ```

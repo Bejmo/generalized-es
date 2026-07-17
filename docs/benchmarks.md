@@ -23,35 +23,32 @@ All functions accept an `n`-dimensional vector `x` and return a scalar value (lo
 
 ## Compared Algorithms (`src/experiments/runners/`)
 
-### 1. Custom ES (μ, λ) - `custom_es.py`
+### 1. Prototype 1 - `custom_es.py`
 
-Wrapper around the main engine. It temporarily configures the engine to use only the real-valued block with the benchmark dimension, then restores the original configuration after execution.
-
-- μ = 15, λ = 100 (default)
-- Full log-normal self-adaptation
+Our custom Heterogeneous Evolution Strategy model. On these benchmarks, it is configured to optimize the real-valued block variables:
+- $\mu = 15$, $\lambda = 100$ (default)
+- Full coordinate-wise log-normal self-adaptation (independent $\sigma_i$ step-size for each dimension)
 - Sparse mutation gating
 
-### 2. Differential Evolution - `differential_evolution.py`
+### 2. Isotropic ES (Simple Self-Adaptive) - `isotropic_es.py`
 
-Wrapper around `scipy.optimize.differential_evolution`:
-- Latin Hypercube initialization
-- Runs until the evaluation budget is exhausted
-- No final polishing
+A classic self-adaptive baseline algorithm:
+- $\mu = 15$, $\lambda = 100$
+- Uses a single global step-size $\sigma$ for the entire individual ($n_\sigma = 1, n_\alpha = 0$)
+- Log-normal self-adaptation on the global step-size with learning rate $\tau_0 = 1 / \sqrt{2 \cdot \text{dim}}$
 
-### 3. PSO (Particle Swarm Optimization) - `pso.py`
+### 3. sep-CMA-ES (Separable CMA-ES) - `sep_cma_es.py`
 
-Wrapper around `pyswarms.single.GlobalBestPSO`:
-- 50 particles by default
-- Cognitive/social/inertia parameters: c1=1.5, c2=1.5, w=0.7
-- Iterations = max_evals / n_particles
+Diagonal Covariance Matrix Adaptation Evolution Strategy, wrapped around the `pycma` library with `CMA_diagonal=True`:
+- Forces the covariance matrix to remain diagonal for the entire run
+- Restricts the model to coordinate-wise variance learning, making it a direct baseline competitor to Prototype 1 (since both are restricted to diagonal variance/step-size models)
 
-### 4. (1+1)-ES with the 1/5 Rule - `one_plus_one_es.py`
+### 4. Standard CMA-ES (Upper Bound) - `standard_cma_es.py`
 
-Classic baseline:
-- One parent, one offspring per generation
-- Step-size (sigma) adaptation via the 1/5 success rule
-- Observation window: 10·dim evaluations
-- If success rate > 0.2 -> sigma × 1.2; if < 0.2 -> sigma × 0.82
+Full covariance matrix adaptation ES from the `pycma` library, used strictly as an **Upper Bound (performance ceiling)**:
+- Learns the full covariance matrix (interactions and correlations between variables)
+- Serves as the theoretical limit of what a full-covariance method can achieve, especially on rotated/non-separable functions where diagonal methods face a theoretical bottleneck
+
 
 ---
 

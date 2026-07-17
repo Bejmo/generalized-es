@@ -13,7 +13,7 @@ All ES parameters are centralized in a single module. Other modules import direc
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `MU` | int | 15 | Parent population size (survivors) |
-| `LAMBDA` | int | 100 | Number of offspring per generation |
+| `LAMBDA` | int | 100 | Number of child per generation |
 | `SELECTION_MODE` | str | `"comma"` | Selection policy: `"comma"` or `"plus"` |
 | `MAX_GENERATIONS` | int | 500 | Generation-based stopping criterion |
 
@@ -24,7 +24,7 @@ The ratio μ/λ = 15/100 = 0.15 provides strong selective pressure. Typical valu
 ### Selection Mode
 
 - **Comma (μ, λ):** Higher evolutionary pressure. Parents die each generation, reducing stagnation risk. Requires λ > μ.
-- **Plus (μ + λ):** More conservative. Parents compete with offspring. Higher risk of local stagnation but guarantees monotonic best fitness.
+- **Plus (μ + λ):** More conservative. Parents compete with child. Higher risk of local stagnation but guarantees monotonic best fitness.
 
 ---
 

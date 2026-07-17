@@ -1,4 +1,4 @@
-"""
+﻿"""
 kernels.py — Pure mathematical mutation and self-adaptation kernels (vectorized).
 
 This module contains stateless functions that operate on NumPy arrays representing
@@ -11,9 +11,9 @@ from numpy.typing import NDArray
 
 from . import config as cfg
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 1. Global Learning-Rate Computation
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def compute_learning_rates(n_total: int) -> tuple[float, float]:
     """
@@ -40,9 +40,9 @@ def compute_learning_rates(n_total: int) -> tuple[float, float]:
 TAU_PRIME, TAU = compute_learning_rates(cfg.N_TOTAL)
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 2. Log-Normal Adaptation for Scale-Like Strategy Parameters
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def adapt_scales(
     sigmas: NDArray[np.float64],
@@ -92,9 +92,9 @@ def adapt_scales(
     return updated
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 3. Logit-Normal Adaptation for Probability-Like Strategy Parameters
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def adapt_logits(
     logits: NDArray[np.float64],
@@ -138,16 +138,13 @@ def sigmoid(logits: NDArray[np.float64]) -> NDArray[np.float64]:
     return 1.0 / (1.0 + np.exp(-logits))
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 4. Sparse-Rate Mutation Gating
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def generate_sparse_mask(size: int, rng: np.random.Generator) -> NDArray[np.bool_]:
     """
     Generate a boolean mask where each dimension is active with probability SPARSE_RATE.
-
-    Dimensions marked False will NOT have their gene value or corresponding
-    strategy parameter modified in the current mutation step.
 
     Parameters
     ----------
@@ -164,9 +161,9 @@ def generate_sparse_mask(size: int, rng: np.random.Generator) -> NDArray[np.bool
     return rng.random(size) < cfg.SPARSE_RATE
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 5. Vectorized Mutation Kernels for Numerical Blocks
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def mutate_real(
     values: NDArray[np.float64],
@@ -287,9 +284,9 @@ def mutate_binary(
     return mutated
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 6. Categorical Re-Sampling (Excluding Current Index)
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def mutate_categorical(
     values: NDArray[np.int64],
@@ -334,9 +331,9 @@ def mutate_categorical(
     return mutated
 
 
-# =============================================================================
+# -----------------------------------------------------------------------------
 # 7. Fuzzy Perturbation with Reflection and Monotonic Enforcement
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 def _reflect_unit(x: NDArray[np.float64]) -> NDArray[np.float64]:
     """

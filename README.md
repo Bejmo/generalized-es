@@ -1,6 +1,6 @@
 # Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
-Prototype of a **Heterogeneous Evolution Strategy** with (μ, λ) / (μ + λ) selection and log-normal self-adaptation. It includes a comparison framework against reference optimizers (Differential Evolution, PSO, and (1+1)-ES with the 1/5 rule).
+Prototype of a **Heterogeneous Evolution Strategy** with (μ, λ) / (μ + λ) selection and log-normal self-adaptation. It includes a comparison framework against baseline optimizers: Isotropic ES, sep-CMA-ES, and Standard CMA-ES (as an Upper Bound).
 
 ---
 
@@ -74,7 +74,7 @@ Open `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb
 
 - **Experiment 1: Equal-Budget Benchmark Comparison**
 	- Notebook: `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb`
-	- Goal: compare Custom ES against Differential Evolution, PSO, and (1+1)-ES under the same evaluation budget.
+	- Goal: compare Prototype 1 against Isotropic ES, sep-CMA-ES, and Standard CMA-ES (acting as the performance upper bound ceiling) under the same evaluation budget.
 	- Protocol: real-valued benchmark block, 10 seeds, fixed `MAX_EVALS` per runner.
 	- Output: convergence plots and final median fitness summary per benchmark.
 
@@ -84,21 +84,21 @@ Open `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb
 
 ```
 TFG/
-├── src/                        # Main source code
-│   ├── es_model/               #   Heterogeneous ES engine
-│   │   ├── config.py           #     Centralized hyperparameters
-│   │   ├── kernels.py          #     Vectorized mutation kernels
-│   │   ├── engine.py           #     Population dynamics and selection
-│   │   └── main.py             #     Single terminal entrypoint + model loop
-│   └── experiments/            #   Experiment modules and helper runners
-│       ├── benchmarks/         #     Objective functions (Sphere, Rastrigin...)
-│       └── runners/            #     Reference algorithm wrappers
-├── experiments/                # Experimental notebooks and artifacts
-│   └── notebooks/              #   Analysis Jupyter notebooks
-├── docs/                       # Detailed technical documentation
-├── openspec/                   # OpenSpec design specifications
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
+├-- src/                        # Main source code
+│   ├-- es_model/               #   Heterogeneous ES engine
+│   │   ├-- config.py           #     Centralized hyperparameters
+│   │   ├-- kernels.py          #     Vectorized mutation kernels
+│   │   ├-- engine.py           #     Population dynamics and selection
+│   │   └-- main.py             #     Single terminal entrypoint + model loop
+│   └-- experiments/            #   Experiment modules and helper runners
+│       ├-- benchmarks/         #     Objective functions (Sphere, Rastrigin...)
+│       └-- runners/            #     Reference algorithm wrappers
+├-- experiments/                # Experimental notebooks and artifacts
+│   └-- notebooks/              #   Analysis Jupyter notebooks
+├-- docs/                       # Detailed technical documentation
+├-- openspec/                   # OpenSpec design specifications
+├-- requirements.txt            # Python dependencies
+└-- README.md                   # This file
 ```
 
 ---
@@ -108,8 +108,9 @@ TFG/
 | Package | Usage |
 |---------|-----|
 | `numpy` | ES vectorized operations and typed arrays |
-| `scipy` | Differential Evolution (reference algorithm) |
-| `pyswarms` | Particle Swarm Optimization (reference algorithm) |
+| `scipy` | Mathematical functions and helpers |
+| `pyswarms` | Particle Swarm Optimization (legacy reference) |
+| `cma` | CMA-ES and separable CMA-ES baselines |
 | `matplotlib` | Convergence plots in notebooks |
 
 ---

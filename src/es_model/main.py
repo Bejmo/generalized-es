@@ -15,16 +15,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.experiments.benchmarks.functions import BENCHMARKS
-from src.experiments.runners import custom_es, differential_evolution, one_plus_one_es, pso
+from src.experiments.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 from . import config as cfg
 from .engine import Individual, clone_individual, create_random_individual, mutate_individual, select_survivors
 
 RUNNERS = {
-    "Custom ES (mu,lam)": custom_es.run,
-    "Diff. Evolution": differential_evolution.run,
-    "PSO": pso.run,
-    "(1+1)-ES 1/5": one_plus_one_es.run,
+    "Prototype 1": custom_es.run,
+    "Isotropic ES (Simple Self-Adaptive)": isotropic_es.run,
+    "sep-CMA-ES (Separable CMA-ES)": sep_cma_es.run,
+    "Standard CMA-ES (Upper Bound)": standard_cma_es.run,
 }
 
 DEFAULT_MODEL_GENERATIONS = 500
@@ -58,9 +58,7 @@ class BenchmarkSummary:
 
 def evaluate(ind: Individual) -> float:
     """
-    Default fitness function: Sphere (sum of squared real components).
-
-    Replace this with any domain-specific objective. Lower values are better.
+    Default fitness function: Sphere.
     """
     return float(np.sum(ind.real ** 2))
 
@@ -81,17 +79,17 @@ def run() -> None:
     print(f"[ES] Starting optimization for {cfg.MAX_GENERATIONS} generations...\n")
 
     for gen in range(1, cfg.MAX_GENERATIONS + 1):
-        offspring: list[Individual] = []
+        childs: list[Individual] = []
         for _ in range(cfg.LAMBDA):
             parent_idx = rng.integers(0, cfg.MU)
             child = clone_individual(parents[parent_idx])
             mutate_individual(child, rng)
-            offspring.append(child)
+            childs.append(child)
 
-        for child in offspring:
+        for child in childs:
             child.fitness = evaluate(child)
 
-        parents = select_survivors(parents, offspring)
+        parents = select_survivors(parents, childs)
 
         best_fitness: float = parents[0].fitness
         if gen % cfg.LOG_INTERVAL == 0 or gen == 1:
@@ -157,19 +155,19 @@ def run_benchmarks(dim: int = 10, max_evals: int = 10_000, n_seeds: int = 10) ->
                 traces.append(trace)
             results[bname][rname] = np.array(traces)
             median_final = np.median(traces, axis=0)[-1]
-            print(f"  {bname:12s} | {rname:20s} | median final: {median_final:.4e}")
+            print(f"  {bname:12s} | {rname:36s} | median final: {median_final:.4e}")
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 170)
     print("RESULTS SUMMARY - Median final fitness")
-    print("=" * 80)
-    header = f"{'Benchmark':<14}" + "".join(f"{r:<22}" for r in RUNNERS.keys())
+    print("=" * 170)
+    header = f"{'Benchmark':<14}" + "".join(f"{r:<38}" for r in RUNNERS.keys())
     print(header)
     print("-" * len(header))
     for bname in BENCHMARKS:
         row = f"{bname:<14}"
         for rname in RUNNERS:
             med = np.median(results[bname][rname][:, -1])
-            row += f"{med:<22.4e}"
+            row += f"{med:<38.4e}"
         print(row)
 
     elapsed = time.perf_counter() - start
@@ -209,14 +207,18 @@ def _prompt_int(label: str, default: int, minimum: int = 1) -> int:
 
 
 def _prompt_model_options(default_generations: int, default_log_interval: int) -> dict[str, int]:
-    print("\nModel options (press Enter to use defaults)")
+    print("\n----------------------------------------------------------------------------")
+    print("Model options (press Enter to use defaults)")
+    print("----------------------------------------------------------------------------")
     generations = _prompt_int("Generations", default_generations)
     log_interval = _prompt_int("Log interval", default_log_interval)
     return {"generations": generations, "log_interval": log_interval}
 
 
 def _prompt_benchmark_options(default_dim: int, default_max_evals: int, default_seeds: int) -> dict[str, int]:
-    print("\nBenchmark options (press Enter to use defaults)")
+    print("\n----------------------------------------------------------------------------")
+    print("Benchmark options (press Enter to use defaults)")
+    print("----------------------------------------------------------------------------")
     dim = _prompt_int("Dimension", default_dim)
     max_evals = _prompt_int("Max evals", default_max_evals)
     seeds = _prompt_int("Seeds", default_seeds)
@@ -238,7 +240,9 @@ def _select_interactive_mode() -> tuple[str, dict[str, int]]:
     }
 
     while True:
-        print("\nSelect workflow:")
+        print("\n----------------------------------------------------------------------------")
+        print("Select workflow")
+        print("----------------------------------------------------------------------------")
         print("  1) model")
         print("  2) benchmarks")
         print("  3) smoke")
