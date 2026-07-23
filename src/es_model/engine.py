@@ -1,4 +1,4 @@
-﻿"""
+"""
 Defines the Individual data class, child cloning, deterministic rank-based
 survivor selection for both (mu, lambda) and (mu + lambda) modes, and the
 flattened genome output contract.
@@ -24,24 +24,23 @@ class Individual:
     Strategy parameters co-evolve with the genome via self-adaptation.
     """
 
-    # -- Decision Variable Blocks ------------------------------------------
+    # Decision Variable Blocks
     real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     count: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     binary: NDArray[np.uint8] = field(default_factory=lambda: np.zeros(0, dtype=np.uint8))
     categorical: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
 
-    # -- Strategy Parameters -----------------------------------------------
+    # Strategy Parameters
     sigma_real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     lambda_count: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     sigma_fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_binary: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_cat: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
 
-    # -- Fitness -----------------------------------------------------------
+    # Fitness
     fitness: float = float("inf")
 
-    # ---------------------------------------------------------------------
     @property
     def genome(self) -> NDArray[np.float64]:
         """
@@ -132,35 +131,22 @@ def mutate_individual(ind: Individual, rng: np.random.Generator) -> None:
     Apply self-adaptive mutation.
 
     Steps:
-    1. Generate sparse masks per block.
-    2. Adapt strategy parameters (log-normal for scales, logit-normal for probs).
-    3. Mutate decision variables using adapted strategies.
+    1. Adapt strategy parameters (log-normal for scales, logit-normal for probs).
+    2. Mutate decision variables using adapted strategies.
     """
-    # Sparse Masks
-    mask_real = kernels.generate_sparse_mask(cfg.N_REAL, rng)
-    mask_count = kernels.generate_sparse_mask(cfg.N_COUNT, rng)
-    mask_binary = kernels.generate_sparse_mask(cfg.N_BINARY, rng)
-    mask_cat = kernels.generate_sparse_mask(cfg.N_CATEGORICAL, rng)
-    mask_fuzzy = kernels.generate_sparse_mask(cfg.N_FUZZY, rng)
-
     # Adapt Strategies
-    ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng, mask_real)
-    ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng, mask_count)
-    ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, _expand_fuzzy_mask(mask_fuzzy))
-    ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, mask_binary)
-    ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, mask_cat)
+    ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng)
+    ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng)
+    ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng)
+    ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng)
+    ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng)
 
     # Mutate Decision Variables
-    ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng, mask_real)
-    ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng, mask_count)
-    ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng, mask_binary)
-    ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng, mask_cat)
-    ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng, mask_fuzzy)
-
-
-def _expand_fuzzy_mask(mask_per_var: NDArray[np.bool_]) -> NDArray[np.bool_]:
-    """Expand per-variable fuzzy mask (N_FUZZY,) to per-point mask (N_FUZZY*3,)."""
-    return np.repeat(mask_per_var, 3)
+    ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng)
+    ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng)
+    ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng)
+    ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng)
+    ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng)
 
 
 # -----------------------------------------------------------------------------

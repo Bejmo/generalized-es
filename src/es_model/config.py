@@ -1,4 +1,4 @@
-﻿"""
+"""
 Configuration file: hyperparameters, bounds, dimensions, adaptation constants, and runtime flags.
 NOTE: By note, this file only contains static configuration constants.
 """
@@ -29,8 +29,8 @@ CATEGORICAL_K: np.ndarray = np.array([3, 4, 5], dtype=np.int64)
 # 3. Bounds for variables
 # -----------------------------------------------------------------------------
 # Real bounds: shape (N_REAL, 2) — [lower, upper] per dimension
-LOWER_BOUND_REAL: float = -5.0
-UPPER_BOUND_REAL: float = 5.0
+LOWER_BOUND_REAL: float = -5.12
+UPPER_BOUND_REAL: float = 5.12
 REAL_BOUNDS: np.ndarray = np.column_stack([
     np.full(N_REAL, LOWER_BOUND_REAL, dtype=np.float64), # Lower bound for real variables
     np.full(N_REAL, UPPER_BOUND_REAL, dtype=np.float64),  # Upper bound for real variables
@@ -56,24 +56,19 @@ SIGMA_FLOOR: float = 1e-6
 # -----------------------------------------------------------------------------
 # 5. Initial Strategy Parameter Defaults
 # -----------------------------------------------------------------------------
-INIT_SIGMA_REAL: float = 0.5       # Initial mutation step-size for reals
+INIT_SIGMA_REAL: float = (UPPER_BOUND_REAL - LOWER_BOUND_REAL) / 3.0       # Initial mutation step-size for reals (~1/3 of domain range)
 INIT_LAMBDA_COUNT: float = 1.0     # Initial Poisson rate for counts
 INIT_SIGMA_FUZZY: float = 0.05     # Initial sigma for fuzzy control points
 INIT_LOGIT_BINARY: float = 0.0     # Initial logit for binary flip probability (p=0.5)
 INIT_LOGIT_CAT: float = 0.0        # Initial logit for categorical mutation prob (p=0.5)
 
 # -----------------------------------------------------------------------------
-# 6. Sparse Mutation Gating
-# -----------------------------------------------------------------------------
-SPARSE_RATE: float = 0.7  # Probability that each dimension is ACTIVE for mutation (1 - SPARSE_RATE = chance of being INACTIVE)
-
-# -----------------------------------------------------------------------------
-# 7. Fuzzy Structural Constants
+# 6. Fuzzy Structural Constants
 # -----------------------------------------------------------------------------
 FUZZY_EPSILON: float = 1e-4  # Minimum margin between a, b, c to avoid collapse
 
 # -----------------------------------------------------------------------------
-# 8. Deterministic Seed and Runtime Toggles
+# 7. Deterministic Seed and Runtime Toggles
 # -----------------------------------------------------------------------------
 SEED: int = 42                # Deterministic RNG seed for reproducibility
 ENABLE_TRACE_LOG: bool = False  # Whether to log flattened genome vectors per gen

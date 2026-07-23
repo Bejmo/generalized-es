@@ -14,8 +14,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.experiments.benchmarks.functions import BENCHMARKS
-from src.experiments.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
+from src.benchmarks.functions import BENCHMARKS
+from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 from . import config as cfg
 from .engine import Individual, clone_individual, create_random_individual, mutate_individual, select_survivors
@@ -148,10 +148,11 @@ def run_benchmarks(dim: int = 10, max_evals: int = 10_000, n_seeds: int = 10) ->
     results = {}
     for bname, binfo in BENCHMARKS.items():
         results[bname] = {}
+        b_dim = binfo.get("dim", dim)
         for rname, runner in RUNNERS.items():
             traces = []
             for seed in seeds:
-                trace = runner(binfo["fn"], dim, binfo["bounds"], seed, max_evals)
+                trace = runner(binfo["fn"], b_dim, binfo["bounds"], seed, max_evals)
                 traces.append(trace)
             results[bname][rname] = np.array(traces)
             median_final = np.median(traces, axis=0)[-1]

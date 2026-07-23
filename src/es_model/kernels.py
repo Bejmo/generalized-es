@@ -1,4 +1,4 @@
-﻿"""
+"""
 kernels.py — Pure mathematical mutation and self-adaptation kernels (vectorized).
 
 This module contains stateless functions that operate on NumPy arrays representing
@@ -47,12 +47,11 @@ TAU_PRIME, TAU = compute_learning_rates(cfg.N_TOTAL)
 def adapt_scales(
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.float64]:
     """
     Apply diagonal log-normal self-adaptation to scale-like parameters.
 
-    Formula per active dimension i:
+    Formula per dimension i:
         sigma_i' = sigma_i * exp(tau' * N(0,1) + tau * N_i(0,1))
 
     After adaptation, values are clamped to SIGMA_FLOOR to prevent freezing.
@@ -63,8 +62,6 @@ def adapt_scales(
         Current strategy parameter vector (positive).
     rng : numpy Generator
         Random number generator instance.
-    mask : ndarray of bool or None
-        Sparse-gating mask. True = active dimension. None = all active.
 
     Returns
     -------
@@ -79,13 +76,7 @@ def adapt_scales(
 
     # Compute multiplicative update factor.
     factor: NDArray[np.float64] = np.exp(global_noise + local_noise)
-
-    if mask is not None:
-        # Only update active dimensions; inactive keep original value.
-        updated = sigmas.copy()
-        updated[mask] = sigmas[mask] * factor[mask]
-    else:
-        updated = sigmas * factor
+    updated = sigmas * factor
 
     # Enforce stability floor — prevent complete dimensional convergence.
     np.maximum(updated, cfg.SIGMA_FLOOR, out=updated)
@@ -99,7 +90,6 @@ def adapt_scales(
 def adapt_logits(
     logits: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.float64]:
     """
     Apply additive Gaussian noise to logit-space strategy parameters.
@@ -113,8 +103,6 @@ def adapt_logits(
         Current logit values (real line).
     rng : numpy Generator
         Random number generator instance.
-    mask : ndarray of bool or None
-        Sparse-gating mask. None = all active.
 
     Returns
     -------
@@ -123,14 +111,7 @@ def adapt_logits(
     """
     n = logits.shape[0]
     noise: NDArray[np.float64] = rng.standard_normal(n) * TAU
-
-    if mask is not None:
-        updated = logits.copy()
-        updated[mask] = logits[mask] + noise[mask]
-    else:
-        updated = logits + noise
-
-    return updated
+    return logits + noise
 
 
 def sigmoid(logits: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -139,37 +120,34 @@ def sigmoid(logits: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 # -----------------------------------------------------------------------------
-# 4. Sparse-Rate Mutation Gating
+# 4. Vectorized Mutation Kernels for Numerical Blocks
 # -----------------------------------------------------------------------------
 
-def generate_sparse_mask(size: int, rng: np.random.Generator) -> NDArray[np.bool_]:
+def _reflect_bounds(
+    x: NDArray[np.float64],
+    lower: NDArray[np.float64],
+    upper: NDArray[np.float64],
+) -> NDArray[np.float64]:
     """
-    Generate a boolean mask where each dimension is active with probability SPARSE_RATE.
+    Iteratively reflect values into [lower, upper].
 
-    Parameters
-    ----------
-    size : int
-        Number of dimensions to gate.
-    rng : numpy Generator
-        Random number generator instance.
-
-    Returns
-    -------
-    ndarray of bool
-        True = active, False = inactive.
+    Mirroring algorithm: values below lower become 2*lower - x,
+    values above upper become 2*upper - x, repeated until all are in bounds.
     """
-    return rng.random(size) < cfg.SPARSE_RATE
+    for _ in range(10):  # Safety cap on iterations.
+        below = x < lower
+        above = x > upper
+        if not (below.any() or above.any()):
+            break
+        x = np.where(below, 2.0 * lower - x, x)
+        x = np.where(above, 2.0 * upper - x, x)
+    return np.clip(x, lower, upper)  # Final safety clamp.
 
-
-# -----------------------------------------------------------------------------
-# 5. Vectorized Mutation Kernels for Numerical Blocks
-# -----------------------------------------------------------------------------
 
 def mutate_real(
     values: NDArray[np.float64],
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.float64]:
     """
     Gaussian mutation for the real-valued block.
@@ -177,7 +155,7 @@ def mutate_real(
     x' = x + N(0, sigma^2 * scale^2)  →  simplified as x' = x + sigma * N(0,1)
     since the scale factor is absorbed into sigma through adaptation.
 
-    After perturbation, values are clipped to configured real bounds.
+    After perturbation, values are reflected into domain bounds.
 
     Parameters
     ----------
@@ -186,23 +164,17 @@ def mutate_real(
     sigmas : ndarray of float64
         Adapted step-size vector for this block.
     rng : numpy Generator
-    mask : ndarray of bool or None
 
     Returns
     -------
     ndarray of float64
-        Mutated and bounded values.
+        Mutated and bounded values via reflection.
     """
     perturbation: NDArray[np.float64] = rng.standard_normal(values.shape[0]) * sigmas
+    mutated = values + perturbation
 
-    if mask is not None:
-        mutated = values.copy()
-        mutated[mask] = values[mask] + perturbation[mask]
-    else:
-        mutated = values + perturbation
-
-    # Clip to domain bounds.
-    np.clip(mutated, cfg.REAL_BOUNDS[:, 0], cfg.REAL_BOUNDS[:, 1], out=mutated)
+    # Reflect to domain bounds (prevents boundary accumulation).
+    mutated = _reflect_bounds(mutated, cfg.REAL_BOUNDS[:, 0], cfg.REAL_BOUNDS[:, 1])
     return mutated
 
 
@@ -210,7 +182,6 @@ def mutate_count(
     values: NDArray[np.int64],
     lambdas: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.int64]:
     """
     Skellam mutation for the integer count block.
@@ -225,23 +196,16 @@ def mutate_count(
     lambdas : ndarray of float64
         Adapted Poisson rate vector.
     rng : numpy Generator
-    mask : ndarray of bool or None
 
     Returns
     -------
     ndarray of int64
         Mutated and bounded integer values.
     """
-    n = values.shape[0]
     pos: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
     neg: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
     delta: NDArray[np.int64] = pos - neg
-
-    if mask is not None:
-        mutated = values.copy()
-        mutated[mask] = values[mask] + delta[mask]
-    else:
-        mutated = values + delta
+    mutated = values + delta
 
     # Clip to domain bounds.
     np.clip(mutated, cfg.COUNT_BOUNDS[:, 0], cfg.COUNT_BOUNDS[:, 1], out=mutated)
@@ -252,7 +216,6 @@ def mutate_binary(
     values: NDArray[np.uint8],
     logits: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.uint8]:
     """
     Independent bit-flip mutation parameterized by per-dimension probabilities.
@@ -266,7 +229,6 @@ def mutate_binary(
     logits : ndarray of float64
         Adapted logit parameters for flip probability.
     rng : numpy Generator
-    mask : ndarray of bool or None
 
     Returns
     -------
@@ -276,23 +238,19 @@ def mutate_binary(
     probs: NDArray[np.float64] = sigmoid(logits)
     flip: NDArray[np.bool_] = rng.random(values.shape[0]) < probs
 
-    if mask is not None:
-        flip = flip & mask
-
     # XOR to flip selected bits.
     mutated: NDArray[np.uint8] = values ^ flip.astype(np.uint8)
     return mutated
 
 
 # -----------------------------------------------------------------------------
-# 6. Categorical Re-Sampling (Excluding Current Index)
+# 5. Categorical Re-Sampling (Excluding Current Index)
 # -----------------------------------------------------------------------------
 
 def mutate_categorical(
     values: NDArray[np.int64],
     logits: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.int64]:
     """
     Categorical mutation: Bernoulli trial triggers uniform re-sample.
@@ -307,7 +265,6 @@ def mutate_categorical(
     logits : ndarray of float64
         Adapted logit parameters for mutation probability.
     rng : numpy Generator
-    mask : ndarray of bool or None
 
     Returns
     -------
@@ -316,9 +273,6 @@ def mutate_categorical(
     """
     probs: NDArray[np.float64] = sigmoid(logits)
     trigger: NDArray[np.bool_] = rng.random(values.shape[0]) < probs
-
-    if mask is not None:
-        trigger = trigger & mask
 
     mutated = values.copy()
     for i in np.where(trigger)[0]:
@@ -332,7 +286,7 @@ def mutate_categorical(
 
 
 # -----------------------------------------------------------------------------
-# 7. Fuzzy Perturbation with Reflection and Monotonic Enforcement
+# 6. Fuzzy Perturbation with Reflection and Monotonic Enforcement
 # -----------------------------------------------------------------------------
 
 def _reflect_unit(x: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -377,14 +331,12 @@ def mutate_fuzzy(
     points: NDArray[np.float64],
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
-    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.float64]:
     """
     Gaussian perturbation on fuzzy control points with structural enforcement.
 
     Each fuzzy variable has 3 control points (a, b, c) stored contiguously:
     points shape = (N_FUZZY * 3,) and sigmas shape = (N_FUZZY * 3,).
-    The sparse mask, if provided, operates per-triple (shape N_FUZZY).
 
     Steps:
     1. Perturb each point: x' = x + N(0, sigma^2)
@@ -398,9 +350,6 @@ def mutate_fuzzy(
     sigmas : ndarray of float64
         Corresponding sigma vector.
     rng : numpy Generator
-    mask : ndarray of bool or None
-        Per-variable mask of shape (N_FUZZY,). None = all active.
-
     Returns
     -------
     ndarray of float64
@@ -411,9 +360,6 @@ def mutate_fuzzy(
     perturbation: NDArray[np.float64] = rng.standard_normal(points.shape[0]) * sigmas
 
     for i in range(n_vars):
-        if mask is not None and not mask[i]:
-            continue  # Skip inactive fuzzy variable.
-
         idx = i * 3
         # Perturb.
         abc = points[idx:idx + 3] + perturbation[idx:idx + 3]
