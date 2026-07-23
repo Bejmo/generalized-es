@@ -20,7 +20,6 @@ Single source of truth for all hyperparameters:
 | `LAMBDA` | 100 | Child generated per generation |
 | `SELECTION_MODE` | `"comma"` | `"comma"` = (μ,λ) / `"plus"` = (μ+λ) |
 | `MAX_GENERATIONS` | 500 | Maximum generations |
-| `SPARSE_RATE` | 0.7 | Activation probability per dimension |
 | `SIGMA_FLOOR` | 1e-6 | Stability floor for scale-like parameters |
 
 **Genome blocks:**
@@ -56,11 +55,6 @@ They are precomputed at import time based on `N_TOTAL`.
 | `mutate_binary()` | Binary | Bit-flip with p = sigmoid(logit) |
 | `mutate_categorical()` | Categorical | Resampling excluding current index |
 | `mutate_fuzzy()` | Fuzzy | Gaussian perturbation on triplets with a <= b <= c constraints |
-| `generate_sparse_mask()` | All | Gating: each dimension active with probability `SPARSE_RATE` |
-
-#### Sparse Mutation Gating
-
-Not all dimensions mutate at each step. A boolean mask is generated per individual: only dimensions marked `True` are perturbed. This improves exploration in high-dimensional spaces.
 
 ---
 
@@ -94,7 +88,7 @@ class Individual:
 
 - **`create_random_individual(rng)`** - Uniform initialization within configured bounds.
 - **`clone_individual(parent)`** - Safe deep copy (all arrays are copied).
-- **`mutate_individual(ind, rng)`** - Full pipeline: generate sparse mask -> adapt strategy -> mutate genes.
+- **`mutate_individual(ind, rng)`** - Full pipeline: adapt strategy -> mutate genes.
 - **`select_survivors(pool, mu, mode)`** - Deterministic rank-based selection. Returns the top μ individuals from the corresponding pool.
 
 #### Selection

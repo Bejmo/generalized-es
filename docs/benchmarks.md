@@ -8,7 +8,7 @@ Compare the custom heterogeneous ES against reference optimizers of similar comp
 
 ---
 
-## Objective Functions (`src/experiments/benchmarks/functions.py`)
+## Objective Functions (`src/benchmarks/functions.py`)
 
 | Function | Domain | Optimum | Characteristics |
 |---------|---------|--------|-----------------|
@@ -21,14 +21,13 @@ All functions accept an `n`-dimensional vector `x` and return a scalar value (lo
 
 ---
 
-## Compared Algorithms (`src/experiments/runners/`)
+## Compared Algorithms (`src/runners/`)
 
 ### 1. Prototype 1 - `custom_es.py`
 
 Our custom Heterogeneous Evolution Strategy model. On these benchmarks, it is configured to optimize the real-valued block variables:
 - $\mu = 15$, $\lambda = 100$ (default)
 - Full coordinate-wise log-normal self-adaptation (independent $\sigma_i$ step-size for each dimension)
-- Sparse mutation gating
 
 ### 2. Isotropic ES (Simple Self-Adaptive) - `isotropic_es.py`
 
@@ -114,7 +113,7 @@ The trace always has length `max_evals`. If the algorithm finishes early, it is 
 
 ## Analysis Notebook
 
-`experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb` provides:
+`experiments/notebooks/experiment_1.ipynb` provides:
 
 1. Interactive execution of all runners
 2. Convergence plots (matplotlib) per benchmark function

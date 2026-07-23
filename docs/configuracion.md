@@ -89,19 +89,6 @@ They are automatically recomputed when `N_TOTAL` changes.
 
 ---
 
-## Sparse Mutation Gating
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SPARSE_RATE` | 0.7 | Probability that a dimension mutates |
-
-At each mutation step, a random boolean mask is generated. Only active dimensions (`True`) are perturbed. This:
-- Reduces the "curse of dimensionality" in large spaces
-- Enables more exploratory partial mutations
-- Gives each dimension a 70% chance of mutation
-
----
-
 ## Runtime
 
 | Variable | Default | Description |
@@ -133,7 +120,5 @@ For deeper changes (μ, λ, bounds, and so on), edit `src/es_model/config.py` di
 | Scenario | Recommendation |
 |-----------|---------------|
 | Multimodal problems | Use `"comma"` mode, increase λ |
-| Very slow convergence | Reduce `SPARSE_RATE` (more dimensions mutate) |
-| Premature convergence | Increase `SPARSE_RATE`, reduce μ/λ ratio |
 | Large search space | Increase `INIT_SIGMA_REAL` |
 | Dominant discrete variables | Shift `INIT_LOGIT_*` toward negative values (less mutation) |

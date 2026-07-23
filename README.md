@@ -68,12 +68,12 @@ python -m src.es_model.main smoke --dim 5 --max-evals 200 --seeds 2
 
 ### Interactive Notebook
 
-Open `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb` in VS Code or Jupyter and select the `.venv` kernel.
+Open `experiments/notebooks/experiment_1.ipynb` in VS Code or Jupyter and select the `.venv` kernel.
 
 ### Named Experiments
 
 - **Experiment 1: Equal-Budget Benchmark Comparison**
-	- Notebook: `experiments/notebooks/experiment_1_equal_budget_benchmark_comparison.ipynb`
+	- Notebook: `experiments/notebooks/experiment_1.ipynb`
 	- Goal: compare Prototype 1 against Isotropic ES, sep-CMA-ES, and Standard CMA-ES (acting as the performance upper bound ceiling) under the same evaluation budget.
 	- Protocol: real-valued benchmark block, 10 seeds, fixed `MAX_EVALS` per runner.
 	- Output: convergence plots and final median fitness summary per benchmark.
@@ -90,9 +90,8 @@ TFG/
 │   │   ├-- kernels.py          #     Vectorized mutation kernels
 │   │   ├-- engine.py           #     Population dynamics and selection
 │   │   └-- main.py             #     Single terminal entrypoint + model loop
-│   └-- experiments/            #   Experiment modules and helper runners
-│       ├-- benchmarks/         #     Objective functions (Sphere, Rastrigin...)
-│       └-- runners/            #     Reference algorithm wrappers
+│   ├-- benchmarks/             #   Objective functions (Sphere, Rastrigin...)
+│   └-- runners/                #   Reference algorithm wrappers
 ├-- experiments/                # Experimental notebooks and artifacts
 │   └-- notebooks/              #   Analysis Jupyter notebooks
 ├-- docs/                       # Detailed technical documentation
