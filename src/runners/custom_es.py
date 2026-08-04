@@ -16,7 +16,7 @@ from src.es_model.engine import (
 def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, **kwargs) -> np.ndarray:
     orig = (cfg.N_REAL, cfg.N_COUNT, cfg.N_BINARY, cfg.N_CATEGORICAL, cfg.N_FUZZY,
             cfg.REAL_BOUNDS, cfg.COUNT_BOUNDS, cfg.N_TOTAL, cfg.MU, cfg.LAMBDA, cfg.CATEGORICAL_K, cfg.INIT_SIGMA_REAL)
-    # @TODO Only real variables (first prototype) 
+    # Only real variables (first prototype)
     cfg.N_REAL = dim
     cfg.N_COUNT = 0
     cfg.N_BINARY = 0
@@ -52,33 +52,34 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, **kwargs) -> np.nda
 
         childs = []
         for _ in range(lam):
-            # Select two distinct parents for dual discrete recombination of object variables
-            idx_a, idx_b = rng.choice(mu, size=2, replace=False)  # Requires mu >= 2
+            idx_a, idx_b = rng.choice(mu, size=2, replace=False)
             parent_a = parents[idx_a]
             parent_b = parents[idx_b]
 
-            # Clone Parent A to preserve structural metadata
             child = clone_individual(parent_a)
-
-            # Assign global geometric intermediate recombination for strategy parameters
             child.sigma_real = global_geom_sigma.copy()
 
-            # Dual discrete recombination of object variables (strictly Parent A and Parent B)
-            mask_a = rng.random(dim) < 0.5
-            child.real = np.where(mask_a, parent_a.real, parent_b.real)  # Discrete recombination preserves parent domain feasibility
+            # @TODO Test different recombinations (discrete/intermediate)
+            use_discrete_recombination = False
 
-            # Self-adaptive mutation and fitness evaluation
+            if use_discrete_recombination:
+                # Dual discrete recombination of object variables
+                mask_a = rng.random(dim) < 0.5
+                child.real = np.where(mask_a, parent_a.real, parent_b.real)
+            else:
+                # Dual intermediate recombination of object variables
+                child.real = (parent_a.real + parent_b.real) / 2.0
+
             mutate_individual(child, rng)
             child.fitness = fn(child.real)
-
             best_so_far = min(best_so_far, child.fitness)
             trace.append(best_so_far)
             childs.append(child)
-
             if len(trace) >= max_evals:
                 break
 
-        parents = select_survivors(parents, childs)
+        if len(childs) > 0:
+            parents = select_survivors(parents, childs)
 
     (cfg.N_REAL, cfg.N_COUNT, cfg.N_BINARY, cfg.N_CATEGORICAL, cfg.N_FUZZY,
      cfg.REAL_BOUNDS, cfg.COUNT_BOUNDS, cfg.N_TOTAL, cfg.MU, cfg.LAMBDA, cfg.CATEGORICAL_K, cfg.INIT_SIGMA_REAL) = orig
