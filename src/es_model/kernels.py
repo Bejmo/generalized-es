@@ -9,7 +9,6 @@ are fully vectorized; structural blocks (categorical, fuzzy) use minimal loops.
 import numpy as np
 from numpy.typing import NDArray
 
-from . import config as cfg
 
 # -----------------------------------------------------------------------------
 # 1. Global Learning-Rate Computation
@@ -31,13 +30,11 @@ def compute_learning_rates(n_total: int) -> tuple[float, float]:
     -------
     (tau_prime, tau) : tuple of float
     """
+    if n_total == 0:
+        return 0.0, 0.0
     tau_prime: float = 1.0 / np.sqrt(2.0 * n_total)
     tau: float = 1.0 / np.sqrt(2.0 * np.sqrt(n_total))
     return tau_prime, tau
-
-
-# Pre-compute once at import time for the configured dimensionality.
-TAU_PRIME, TAU = compute_learning_rates(cfg.N_TOTAL)
 
 
 # -----------------------------------------------------------------------------
@@ -47,6 +44,9 @@ TAU_PRIME, TAU = compute_learning_rates(cfg.N_TOTAL)
 def adapt_scales(
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
+    tau_prime: float,
+    tau: float,
+    sigma_floor: float = 1e-6,
 ) -> NDArray[np.float64]:
     """
     Apply diagonal log-normal self-adaptation to scale-like parameters.
@@ -54,7 +54,7 @@ def adapt_scales(
     Formula per dimension i:
         sigma_i' = sigma_i * exp(tau' * N(0,1) + tau * N_i(0,1))
 
-    After adaptation, values are clamped to SIGMA_FLOOR to prevent freezing.
+    After adaptation, values are clamped to sigma_floor to prevent freezing.
 
     Parameters
     ----------
@@ -62,6 +62,12 @@ def adapt_scales(
         Current strategy parameter vector (positive).
     rng : numpy Generator
         Random number generator instance.
+    tau_prime : float
+        Global adaptation learning rate.
+    tau : float
+        Local (per-dimension) adaptation learning rate.
+    sigma_floor : float
+        Minimum floor to prevent dimensional freezing.
 
     Returns
     -------
@@ -69,17 +75,19 @@ def adapt_scales(
         Updated strategy vector.
     """
     n = sigmas.shape[0]
+    if n == 0:
+        return sigmas.copy()
     # Global noise term shared across all dimensions of this individual.
-    global_noise: float = rng.standard_normal() * TAU_PRIME
+    global_noise: float = rng.standard_normal() * tau_prime
     # Per-dimension local noise.
-    local_noise: NDArray[np.float64] = rng.standard_normal(n) * TAU
+    local_noise: NDArray[np.float64] = rng.standard_normal(n) * tau
 
     # Compute multiplicative update factor.
     factor: NDArray[np.float64] = np.exp(global_noise + local_noise)
     updated = sigmas * factor
 
     # Enforce stability floor — prevent complete dimensional convergence.
-    np.maximum(updated, cfg.SIGMA_FLOOR, out=updated)
+    np.maximum(updated, sigma_floor, out=updated)
     return updated
 
 
@@ -90,6 +98,7 @@ def adapt_scales(
 def adapt_logits(
     logits: NDArray[np.float64],
     rng: np.random.Generator,
+    tau: float,
 ) -> NDArray[np.float64]:
     """
     Apply additive Gaussian noise to logit-space strategy parameters.
@@ -103,6 +112,8 @@ def adapt_logits(
         Current logit values (real line).
     rng : numpy Generator
         Random number generator instance.
+    tau : float
+        Local learning rate.
 
     Returns
     -------
@@ -110,7 +121,9 @@ def adapt_logits(
         Updated logit values.
     """
     n = logits.shape[0]
-    noise: NDArray[np.float64] = rng.standard_normal(n) * TAU
+    if n == 0:
+        return logits.copy()
+    noise: NDArray[np.float64] = rng.standard_normal(n) * tau
     return logits + noise
 
 
@@ -148,6 +161,7 @@ def mutate_real(
     values: NDArray[np.float64],
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
+    real_bounds: NDArray[np.float64],
 ) -> NDArray[np.float64]:
     """
     Gaussian mutation for the real-valued block.
@@ -164,17 +178,21 @@ def mutate_real(
     sigmas : ndarray of float64
         Adapted step-size vector for this block.
     rng : numpy Generator
+    real_bounds : ndarray of shape (n_real, 2)
+        Bound constraints [lower, upper] per dimension.
 
     Returns
     -------
     ndarray of float64
         Mutated and bounded values via reflection.
     """
+    if values.shape[0] == 0:
+        return values.copy()
     perturbation: NDArray[np.float64] = rng.standard_normal(values.shape[0]) * sigmas
     mutated = values + perturbation
 
     # Reflect to domain bounds (prevents boundary accumulation).
-    mutated = _reflect_bounds(mutated, cfg.REAL_BOUNDS[:, 0], cfg.REAL_BOUNDS[:, 1])
+    mutated = _reflect_bounds(mutated, real_bounds[:, 0], real_bounds[:, 1])
     return mutated
 
 
@@ -182,6 +200,7 @@ def mutate_count(
     values: NDArray[np.int64],
     lambdas: NDArray[np.float64],
     rng: np.random.Generator,
+    count_bounds: NDArray[np.int64],
 ) -> NDArray[np.int64]:
     """
     Skellam mutation for the integer count block.
@@ -196,19 +215,22 @@ def mutate_count(
     lambdas : ndarray of float64
         Adapted Poisson rate vector.
     rng : numpy Generator
+    count_bounds : ndarray of shape (n_count, 2)
 
     Returns
     -------
     ndarray of int64
         Mutated and bounded integer values.
     """
+    if values.shape[0] == 0:
+        return values.copy()
     pos: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
     neg: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
     delta: NDArray[np.int64] = pos - neg
     mutated = values + delta
 
     # Clip to domain bounds.
-    np.clip(mutated, cfg.COUNT_BOUNDS[:, 0], cfg.COUNT_BOUNDS[:, 1], out=mutated)
+    np.clip(mutated, count_bounds[:, 0], count_bounds[:, 1], out=mutated)
     return mutated
 
 
@@ -235,6 +257,8 @@ def mutate_binary(
     ndarray of uint8
         Mutated binary vector.
     """
+    if values.shape[0] == 0:
+        return values.copy()
     probs: NDArray[np.float64] = sigmoid(logits)
     flip: NDArray[np.bool_] = rng.random(values.shape[0]) < probs
 
@@ -251,6 +275,7 @@ def mutate_categorical(
     values: NDArray[np.int64],
     logits: NDArray[np.float64],
     rng: np.random.Generator,
+    categorical_k: NDArray[np.int64],
 ) -> NDArray[np.int64]:
     """
     Categorical mutation: Bernoulli trial triggers uniform re-sample.
@@ -265,18 +290,22 @@ def mutate_categorical(
     logits : ndarray of float64
         Adapted logit parameters for mutation probability.
     rng : numpy Generator
+    categorical_k : ndarray of int64
+        Number of categories per categorical variable.
 
     Returns
     -------
     ndarray of int64
         Mutated categorical indices.
     """
+    if values.shape[0] == 0:
+        return values.copy()
     probs: NDArray[np.float64] = sigmoid(logits)
     trigger: NDArray[np.bool_] = rng.random(values.shape[0]) < probs
 
     mutated = values.copy()
     for i in np.where(trigger)[0]:
-        k = int(cfg.CATEGORICAL_K[i])
+        k = int(categorical_k[i])
         current = int(values[i])
         # Uniform sample from alternatives (exclude current).
         alternatives = np.delete(np.arange(k, dtype=np.int64), current)
@@ -306,13 +335,13 @@ def _reflect_unit(x: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.clip(x, 0.0, 1.0)  # Final safety clamp.
 
 
-def _enforce_monotonic(a: float, b: float, c: float) -> tuple[float, float, float]:
+def _enforce_monotonic(a: float, b: float, c: float, fuzzy_epsilon: float = 1e-4) -> tuple[float, float, float]:
     """
     Guarantee a <= b <= c with epsilon margin.
 
     Uses a non-collapsing structural push so triangles do not flatten.
     """
-    eps = cfg.FUZZY_EPSILON
+    eps = fuzzy_epsilon
     # Sort to start from a feasible ordering.
     a, b, c = float(np.minimum(a, b)), float(np.median([a, b, c])), float(np.maximum(b, c))
     # Push b away from a and c away from b if too close.
@@ -331,12 +360,14 @@ def mutate_fuzzy(
     points: NDArray[np.float64],
     sigmas: NDArray[np.float64],
     rng: np.random.Generator,
+    n_fuzzy: int,
+    fuzzy_epsilon: float = 1e-4,
 ) -> NDArray[np.float64]:
     """
     Gaussian perturbation on fuzzy control points with structural enforcement.
 
     Each fuzzy variable has 3 control points (a, b, c) stored contiguously:
-    points shape = (N_FUZZY * 3,) and sigmas shape = (N_FUZZY * 3,).
+    points shape = (n_fuzzy * 3,) and sigmas shape = (n_fuzzy * 3,).
 
     Steps:
     1. Perturb each point: x' = x + N(0, sigma^2)
@@ -350,23 +381,29 @@ def mutate_fuzzy(
     sigmas : ndarray of float64
         Corresponding sigma vector.
     rng : numpy Generator
+    n_fuzzy : int
+        Number of fuzzy variables.
+    fuzzy_epsilon : float
+        Minimum epsilon margin.
+
     Returns
     -------
     ndarray of float64
         Mutated control points with structural guarantees.
     """
-    n_vars = cfg.N_FUZZY
+    if n_fuzzy == 0 or points.shape[0] == 0:
+        return points.copy()
     mutated = points.copy()
     perturbation: NDArray[np.float64] = rng.standard_normal(points.shape[0]) * sigmas
 
-    for i in range(n_vars):
+    for i in range(n_fuzzy):
         idx = i * 3
         # Perturb.
         abc = points[idx:idx + 3] + perturbation[idx:idx + 3]
         # Reflect into [0, 1].
         abc = _reflect_unit(abc)
         # Enforce monotonic constraint.
-        a, b, c = _enforce_monotonic(float(abc[0]), float(abc[1]), float(abc[2]))
+        a, b, c = _enforce_monotonic(float(abc[0]), float(abc[1]), float(abc[2]), fuzzy_epsilon=fuzzy_epsilon)
         mutated[idx] = a
         mutated[idx + 1] = b
         mutated[idx + 2] = c

@@ -1,75 +1,126 @@
 """
-Configuration file: hyperparameters, bounds, dimensions, adaptation constants, and runtime flags.
-NOTE: By note, this file only contains static configuration constants.
+Configuration file: ESConfig dataclass for hyperparameters, bounds, dimensions, and adaptation constants.
 """
 
+from dataclasses import dataclass, field
 import numpy as np
+from numpy.typing import NDArray
 
-# -----------------------------------------------------------------------------
-# 1. Population Dynamics
-# -----------------------------------------------------------------------------
-MU: int = 15              # Number of survivors
-LAMBDA: int = 100         # Number of childs per generation
-SELECTION_MODE: str = "comma"  # "comma" = (mu, lambda) | "plus" = (mu + lambda)
-MAX_GENERATIONS: int = 500
 
-# -----------------------------------------------------------------------------
-# 2. Genome Dimensions
-# -----------------------------------------------------------------------------
-N_REAL: int = 10          # Number of real variables
-N_COUNT: int = 5          # Number of count variables
-N_BINARY: int = 8         # Number of binary variables
-N_CATEGORICAL: int = 3    # Number of categorical variables
-N_FUZZY: int = 4          # Number of fuzzy variables
+@dataclass
+class ESConfig:
+    """
+    Configuration dataclass for the Heterogeneous Evolution Strategy.
+    Encapsulates all hyperparameters, genome dimensions, variable bounds,
+    and self-adaptation defaults.
+    """
 
-# Categorical cardinalities: number of categories per categorical variable
-CATEGORICAL_K: np.ndarray = np.array([3, 4, 5], dtype=np.int64)
+    # -----------------------------------------------------------------------------
+    # 1. Population Dynamics
+    # -----------------------------------------------------------------------------
+    mu: int = 15                   # Number of survivors (parents)
+    lam: int = 100                 # Number of children per generation
+    selection_mode: str = "comma"  # "comma" = (mu, lambda) | "plus" = (mu + lambda)
+    max_generations: int = 500
 
-# -----------------------------------------------------------------------------
-# 3. Bounds for variables
-# -----------------------------------------------------------------------------
-# Real bounds: shape (N_REAL, 2) — [lower, upper] per dimension
-LOWER_BOUND_REAL: float = -5.12
-UPPER_BOUND_REAL: float = 5.12
-REAL_BOUNDS: np.ndarray = np.column_stack([
-    np.full(N_REAL, LOWER_BOUND_REAL, dtype=np.float64), # Lower bound for real variables
-    np.full(N_REAL, UPPER_BOUND_REAL, dtype=np.float64),  # Upper bound for real variables
-])
+    # -----------------------------------------------------------------------------
+    # 2. Genome Dimensions
+    # -----------------------------------------------------------------------------
+    n_real: int = 10               # Number of real variables
+    n_count: int = 5               # Number of count variables
+    n_binary: int = 8              # Number of binary variables
+    n_categorical: int = 3         # Number of categorical variables
+    n_fuzzy: int = 4               # Number of fuzzy variables
 
-# Count bounds: shape (N_COUNT, 2) — [lower, upper] per dimension
-LOWER_BOUND_COUNT: int = 0
-UPPER_BOUND_COUNT: int = 20
-COUNT_BOUNDS: np.ndarray = np.column_stack([
-    np.full(N_COUNT, LOWER_BOUND_COUNT, dtype=np.int64), # Lower bound for count variables
-    np.full(N_COUNT, UPPER_BOUND_COUNT, dtype=np.int64), # Upper bound for count variables
-])
+    # Categorical cardinalities: number of categories per categorical variable
+    categorical_k: NDArray[np.int64] = field(
+        default_factory=lambda: np.array([3, 4, 5], dtype=np.int64)
+    )
 
-# -----------------------------------------------------------------------------
-# 4. Self-Adaptation Constants
-# -----------------------------------------------------------------------------
-# Total active genome dimensionality used for learning-rate computation.
-N_TOTAL: int = N_REAL + N_COUNT + N_BINARY + N_CATEGORICAL + N_FUZZY * 3 # Each fuzzy variable has 3 control points (a,b,c)
+    # -----------------------------------------------------------------------------
+    # 3. Bounds for variables
+    # -----------------------------------------------------------------------------
+    lower_bound_real: float = -5.12
+    upper_bound_real: float = 5.12
 
-# Stability floor for strategy parameters to prevent numerical issues (e.g., zero or negative mutation step-sizes)
-SIGMA_FLOOR: float = 1e-6
+    lower_bound_count: int = 0
+    upper_bound_count: int = 20
 
-# -----------------------------------------------------------------------------
-# 5. Initial Strategy Parameter Defaults
-# -----------------------------------------------------------------------------
-INIT_SIGMA_REAL: float = (UPPER_BOUND_REAL - LOWER_BOUND_REAL) / 3.0       # Initial mutation step-size for reals (~1/3 of domain range)
-INIT_LAMBDA_COUNT: float = 1.0     # Initial Poisson rate for counts
-INIT_SIGMA_FUZZY: float = 0.05     # Initial sigma for fuzzy control points
-INIT_LOGIT_BINARY: float = 0.0     # Initial logit for binary flip probability (p=0.5)
-INIT_LOGIT_CAT: float = 0.0        # Initial logit for categorical mutation prob (p=0.5)
+    # Custom real bounds override (shape: (n_real, 2)). If set, overrides lower/upper_bound_real.
+    custom_real_bounds: NDArray[np.float64] | None = None
+    custom_count_bounds: NDArray[np.int64] | None = None
 
-# -----------------------------------------------------------------------------
-# 6. Fuzzy Structural Constants
-# -----------------------------------------------------------------------------
-FUZZY_EPSILON: float = 1e-4  # Minimum margin between a, b, c to avoid collapse
+    # -----------------------------------------------------------------------------
+    # 4. Self-Adaptation Constants
+    # -----------------------------------------------------------------------------
+    sigma_floor: float = 1e-6      # Stability floor for strategy parameters
 
-# -----------------------------------------------------------------------------
-# 7. Deterministic Seed and Runtime Toggles
-# -----------------------------------------------------------------------------
-SEED: int = 42                # Deterministic RNG seed for reproducibility
-ENABLE_TRACE_LOG: bool = False  # Whether to log flattened genome vectors per gen
-LOG_INTERVAL: int = 10        # Print convergence info every N generations
+    # -----------------------------------------------------------------------------
+    # 5. Initial Strategy Parameter Defaults
+    # -----------------------------------------------------------------------------
+    init_lambda_count: float = 1.0  # Initial Poisson rate for counts
+    init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
+    init_logit_binary: float = 0.0  # Initial logit for binary flip probability (p=0.5)
+    init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
+
+    # -----------------------------------------------------------------------------
+    # 6. Fuzzy Structural Constants
+    # -----------------------------------------------------------------------------
+    fuzzy_epsilon: float = 1e-4    # Minimum margin between a, b, c to avoid collapse
+
+    # -----------------------------------------------------------------------------
+    # 7. Deterministic Seed and Runtime Toggles
+    # -----------------------------------------------------------------------------
+    seed: int = 42                 # Deterministic RNG seed for reproducibility
+    enable_trace_log: bool = False # Whether to log flattened genome vectors per gen
+    log_interval: int = 10         # Print convergence info every N generations
+
+    # -----------------------------------------------------------------------------
+    # Dynamic Computed Properties
+    # -----------------------------------------------------------------------------
+    @property
+    def n_total(self) -> int:
+        """Total active genome dimensionality used for learning-rate computation."""
+        return self.n_real + self.n_count + self.n_binary + self.n_categorical + self.n_fuzzy * 3
+
+    @property
+    def real_bounds(self) -> NDArray[np.float64]:
+        """Real variable bounds matrix of shape (n_real, 2)."""
+        if self.custom_real_bounds is not None:
+            return self.custom_real_bounds
+        if self.n_real == 0:
+            return np.empty((0, 2), dtype=np.float64)
+        return np.column_stack([
+            np.full(self.n_real, self.lower_bound_real, dtype=np.float64),
+            np.full(self.n_real, self.upper_bound_real, dtype=np.float64),
+        ])
+
+    @property
+    def count_bounds(self) -> NDArray[np.int64]:
+        """Count variable bounds matrix of shape (n_count, 2)."""
+        if self.custom_count_bounds is not None:
+            return self.custom_count_bounds
+        if self.n_count == 0:
+            return np.empty((0, 2), dtype=np.int64)
+        return np.column_stack([
+            np.full(self.n_count, self.lower_bound_count, dtype=np.int64),
+            np.full(self.n_count, self.upper_bound_count, dtype=np.int64),
+        ])
+
+    @property
+    def init_sigma_real(self) -> float:
+        """Initial mutation step-size for reals (~1/3 of domain range)."""
+        return (self.upper_bound_real - self.lower_bound_real) / 3.0
+
+    @property
+    def tau_prime_and_tau(self) -> tuple[float, float]:
+        """Compute global (tau_prime) and local (tau) learning rates."""
+        if self.n_total == 0:
+            return 0.0, 0.0
+        tau_prime: float = 1.0 / np.sqrt(2.0 * self.n_total)
+        tau: float = 1.0 / np.sqrt(2.0 * np.sqrt(self.n_total))
+        return tau_prime, tau
+
+
+# Default configuration instance for quick use / backward compatibility
+DEFAULT_CONFIG = ESConfig()

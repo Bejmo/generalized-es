@@ -1,15 +1,16 @@
 """
 Defines the Individual data class, child cloning, deterministic rank-based
 survivor selection for both (mu, lambda) and (mu + lambda) modes, and the
-flattened genome output contract.
+HeterogeneousES optimizer class.
 """
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
 
-from . import config as cfg
+from .config import DEFAULT_CONFIG, ESConfig
 from . import kernels
 
 
@@ -63,34 +64,63 @@ class Individual:
 # 2. Random Initialization
 # -----------------------------------------------------------------------------
 
-def create_random_individual(rng: np.random.Generator) -> Individual:
+def create_random_individual(
+    rng: np.random.Generator,
+    config: ESConfig | None = None,
+) -> Individual:
     """Create a randomly initialized individual within configured bounds."""
-    ind = Individual(
-        # Decision variables — uniform random within bounds.
-        real=rng.uniform(cfg.REAL_BOUNDS[:, 0], cfg.REAL_BOUNDS[:, 1]).astype(np.float64),
-        count=rng.integers(
-            cfg.COUNT_BOUNDS[:, 0], cfg.COUNT_BOUNDS[:, 1] + 1, dtype=np.int64
-        ),
-        binary=rng.integers(0, 2, size=cfg.N_BINARY, dtype=np.uint8),
-        categorical=np.array(
-            [rng.integers(0, int(k)) for k in cfg.CATEGORICAL_K], dtype=np.int64
-        ),
-        fuzzy=_random_fuzzy_points(rng),
+    cfg = config if config is not None else DEFAULT_CONFIG
 
-        # Strategy parameters — initialized to configured defaults.
-        sigma_real=np.full(cfg.N_REAL, cfg.INIT_SIGMA_REAL, dtype=np.float64),
-        lambda_count=np.full(cfg.N_COUNT, cfg.INIT_LAMBDA_COUNT, dtype=np.float64),
-        sigma_fuzzy=np.full(cfg.N_FUZZY * 3, cfg.INIT_SIGMA_FUZZY, dtype=np.float64),
-        logit_binary=np.full(cfg.N_BINARY, cfg.INIT_LOGIT_BINARY, dtype=np.float64),
-        logit_cat=np.full(cfg.N_CATEGORICAL, cfg.INIT_LOGIT_CAT, dtype=np.float64),
+    real_b = cfg.real_bounds
+    count_b = cfg.count_bounds
+
+    real_vars = (
+        rng.uniform(real_b[:, 0], real_b[:, 1]).astype(np.float64)
+        if cfg.n_real > 0
+        else np.zeros(0, dtype=np.float64)
+    )
+
+    count_vars = (
+        rng.integers(count_b[:, 0], count_b[:, 1] + 1, dtype=np.int64)
+        if cfg.n_count > 0
+        else np.zeros(0, dtype=np.int64)
+    )
+
+    binary_vars = (
+        rng.integers(0, 2, size=cfg.n_binary, dtype=np.uint8)
+        if cfg.n_binary > 0
+        else np.zeros(0, dtype=np.uint8)
+    )
+
+    cat_vars = (
+        np.array([rng.integers(0, int(k)) for k in cfg.categorical_k], dtype=np.int64)
+        if cfg.n_categorical > 0
+        else np.zeros(0, dtype=np.int64)
+    )
+
+    fuzzy_vars = _random_fuzzy_points(rng, cfg.n_fuzzy) if cfg.n_fuzzy > 0 else np.zeros(0, dtype=np.float64)
+
+    ind = Individual(
+        real=real_vars,
+        count=count_vars,
+        binary=binary_vars,
+        categorical=cat_vars,
+        fuzzy=fuzzy_vars,
+        sigma_real=np.full(cfg.n_real, cfg.init_sigma_real, dtype=np.float64),
+        lambda_count=np.full(cfg.n_count, cfg.init_lambda_count, dtype=np.float64),
+        sigma_fuzzy=np.full(cfg.n_fuzzy * 3, cfg.init_sigma_fuzzy, dtype=np.float64),
+        logit_binary=np.full(cfg.n_binary, cfg.init_logit_binary, dtype=np.float64),
+        logit_cat=np.full(cfg.n_categorical, cfg.init_logit_cat, dtype=np.float64),
     )
     return ind
 
 
-def _random_fuzzy_points(rng: np.random.Generator) -> NDArray[np.float64]:
+def _random_fuzzy_points(rng: np.random.Generator, n_fuzzy: int) -> NDArray[np.float64]:
     """Generate random fuzzy triples (a, b, c) satisfying a <= b <= c."""
-    points = np.empty(cfg.N_FUZZY * 3, dtype=np.float64)
-    for i in range(cfg.N_FUZZY):
+    if n_fuzzy == 0:
+        return np.zeros(0, dtype=np.float64)
+    points = np.empty(n_fuzzy * 3, dtype=np.float64)
+    for i in range(n_fuzzy):
         abc = np.sort(rng.random(3))
         points[i * 3: i * 3 + 3] = abc
     return points
@@ -126,7 +156,11 @@ def clone_individual(parent: Individual) -> Individual:
 # 4. Child Mutation Pipeline
 # -----------------------------------------------------------------------------
 
-def mutate_individual(ind: Individual, rng: np.random.Generator) -> None:
+def mutate_individual(
+    ind: Individual,
+    rng: np.random.Generator,
+    config: ESConfig | None = None,
+) -> None:
     """
     Apply self-adaptive mutation.
 
@@ -134,19 +168,22 @@ def mutate_individual(ind: Individual, rng: np.random.Generator) -> None:
     1. Adapt strategy parameters (log-normal for scales, logit-normal for probs).
     2. Mutate decision variables using adapted strategies.
     """
+    cfg = config if config is not None else DEFAULT_CONFIG
+    tau_prime, tau = cfg.tau_prime_and_tau
+
     # Adapt Strategies
-    ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng)
-    ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng)
-    ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng)
-    ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng)
-    ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng)
+    ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng, tau_prime, tau, cfg.sigma_floor)
+    ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng, tau_prime, tau, cfg.sigma_floor)
+    ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, tau_prime, tau, cfg.sigma_floor)
+    ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, tau)
+    ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, tau)
 
     # Mutate Decision Variables
-    ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng)
-    ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng)
+    ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng, cfg.real_bounds)
+    ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng, cfg.count_bounds)
     ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng)
-    ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng)
-    ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng)
+    ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng, cfg.categorical_k)
+    ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng, cfg.n_fuzzy, cfg.fuzzy_epsilon)
 
 
 # -----------------------------------------------------------------------------
@@ -156,30 +193,11 @@ def mutate_individual(ind: Individual, rng: np.random.Generator) -> None:
 def select_survivors(
     parents: list[Individual],
     child: list[Individual],
-    mode: str = cfg.SELECTION_MODE,
+    mode: str = "comma",
+    mu: int = 15,
 ) -> list[Individual]:
     """
     Deterministic rank-based selection of the top MU individuals.
-
-    Parameters
-    ----------
-    parents : list of Individual
-        Current parent population.
-    child : list of Individual
-        Newly generated child.
-    mode : str
-        "comma" — select from child only.
-        "plus"  — select from parents + child combined.
-
-    Returns
-    -------
-    list of Individual
-        The top MU survivors sorted by fitness (ascending = better).
-
-    Notes
-    -----
-    Ties are broken by stable positional order (earlier index wins),
-    guaranteeing reproducible selection across runs.
     """
     if mode == "comma":
         pool = child
@@ -188,7 +206,99 @@ def select_survivors(
     else:
         raise ValueError(f"Unknown selection mode: {mode!r}. Use 'comma' or 'plus'.")
 
-    # Stable sort: Python's sorted is stable, so equal-fitness candidates
-    # retain their insertion order (deterministic tie-breaking).
     ranked = sorted(pool, key=lambda ind: ind.fitness)
-    return ranked[: cfg.MU]
+    return ranked[:mu]
+
+
+# -----------------------------------------------------------------------------
+# 6. HeterogeneousES Optimizer Class
+# -----------------------------------------------------------------------------
+
+class HeterogeneousES:
+    """
+    Stateful Evolution Strategy optimizer for heterogeneous mixed-variable optimization.
+    """
+
+    def __init__(self, config: ESConfig | None = None, seed: int | None = None):
+        self.config = config if config is not None else DEFAULT_CONFIG
+        actual_seed = seed if seed is not None else self.config.seed
+        self.rng = np.random.default_rng(actual_seed)
+        self.parents: list[Individual] = []
+        self.best_so_far: float = float("inf")
+        self.best_individual: Individual | None = None
+        self.evaluations: int = 0
+        self.generation: int = 0
+
+    def init_population(self, fn: Callable) -> None:
+        """Initialize population and evaluate fitness of initial parents."""
+        self.parents = [create_random_individual(self.rng, self.config) for _ in range(self.config.mu)]
+        self.evaluations = 0
+        self.generation = 0
+        self.best_so_far = float("inf")
+
+        for ind in self.parents:
+            eval_input = ind.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else ind.genome
+            ind.fitness = fn(eval_input)
+            self.evaluations += 1
+            if ind.fitness < self.best_so_far:
+                self.best_so_far = ind.fitness
+                self.best_individual = clone_individual(ind)
+
+    def step(self, fn: Callable) -> float:
+        """Execute one generational step."""
+        self.generation += 1
+        childs: list[Individual] = []
+
+        for _ in range(self.config.lam):
+            parent_idx = self.rng.integers(0, self.config.mu)
+            child = clone_individual(self.parents[parent_idx])
+            mutate_individual(child, self.rng, self.config)
+            eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
+            child.fitness = fn(eval_input)
+            self.evaluations += 1
+
+            if child.fitness < self.best_so_far:
+                self.best_so_far = child.fitness
+                self.best_individual = clone_individual(child)
+
+            childs.append(child)
+
+        self.parents = select_survivors(self.parents, childs, mode=self.config.selection_mode, mu=self.config.mu)
+        return self.best_so_far
+
+    def optimize(self, fn: Callable, max_evals: int) -> NDArray[np.float64]:
+        """Full optimization loop returning 1-D trace of best fitness per evaluation."""
+        trace: list[float] = []
+        self.parents = [create_random_individual(self.rng, self.config) for _ in range(self.config.mu)]
+        self.evaluations = 0
+        self.generation = 0
+        self.best_so_far = float("inf")
+
+        for ind in self.parents:
+            eval_input = ind.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else ind.genome
+            ind.fitness = fn(eval_input)
+            self.best_so_far = min(self.best_so_far, ind.fitness)
+            trace.append(self.best_so_far)
+            if len(trace) >= max_evals:
+                return np.array(trace[:max_evals], dtype=np.float64)
+
+        while len(trace) < max_evals:
+            self.generation += 1
+            childs: list[Individual] = []
+
+            for _ in range(self.config.lam):
+                parent_idx = self.rng.integers(0, self.config.mu)
+                child = clone_individual(self.parents[parent_idx])
+                mutate_individual(child, self.rng, self.config)
+                eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
+                child.fitness = fn(eval_input)
+                self.best_so_far = min(self.best_so_far, child.fitness)
+                trace.append(self.best_so_far)
+                childs.append(child)
+                if len(trace) >= max_evals:
+                    break
+
+            if len(childs) > 0:
+                self.parents = select_survivors(self.parents, childs, mode=self.config.selection_mode, mu=self.config.mu)
+
+        return np.array(trace[:max_evals], dtype=np.float64)

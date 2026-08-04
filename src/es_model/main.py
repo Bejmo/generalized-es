@@ -17,8 +17,8 @@ import numpy as np
 from src.benchmarks.functions import BENCHMARKS
 from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
-from . import config as cfg
-from .engine import Individual, clone_individual, create_random_individual, mutate_individual, select_survivors
+from .config import DEFAULT_CONFIG, ESConfig
+from .engine import Individual, HeterogeneousES, clone_individual, create_random_individual, mutate_individual, select_survivors
 
 RUNNERS = {
     "Prototype 1": custom_es.run,
@@ -58,44 +58,46 @@ class BenchmarkSummary:
 
 def evaluate(ind: Individual) -> float:
     """
-    Default fitness function: Sphere.
+    Default fitness function: Sphere (evaluated on real variables).
     """
     return float(np.sum(ind.real ** 2))
 
 
-def run() -> None:
-    """Execute the ES generational loop."""
-    rng = np.random.default_rng(cfg.SEED)
+def run(config: ESConfig | None = None) -> None:
+    """Execute the ES generational loop using ESConfig."""
+    cfg = config if config is not None else DEFAULT_CONFIG
+    es = HeterogeneousES(cfg)
+    rng = es.rng
 
-    parents: list[Individual] = [create_random_individual(rng) for _ in range(cfg.MU)]
+    parents: list[Individual] = [create_random_individual(rng, cfg) for _ in range(cfg.mu)]
     for ind in parents:
         ind.fitness = evaluate(ind)
 
-    print(f"[ES] Mode={cfg.SELECTION_MODE} | mu={cfg.MU}, lambda={cfg.LAMBDA}")
+    print(f"[ES] Mode={cfg.selection_mode} | mu={cfg.mu}, lambda={cfg.lam}")
     print(
-        f"[ES] Dimensions: real={cfg.N_REAL}, count={cfg.N_COUNT}, "
-        f"binary={cfg.N_BINARY}, cat={cfg.N_CATEGORICAL}, fuzzy={cfg.N_FUZZY}"
+        f"[ES] Dimensions: real={cfg.n_real}, count={cfg.n_count}, "
+        f"binary={cfg.n_binary}, cat={cfg.n_categorical}, fuzzy={cfg.n_fuzzy}"
     )
-    print(f"[ES] Starting optimization for {cfg.MAX_GENERATIONS} generations...\n")
+    print(f"[ES] Starting optimization for {cfg.max_generations} generations...\n")
 
-    for gen in range(1, cfg.MAX_GENERATIONS + 1):
+    for gen in range(1, cfg.max_generations + 1):
         childs: list[Individual] = []
-        for _ in range(cfg.LAMBDA):
-            parent_idx = rng.integers(0, cfg.MU)
+        for _ in range(cfg.lam):
+            parent_idx = rng.integers(0, cfg.mu)
             child = clone_individual(parents[parent_idx])
-            mutate_individual(child, rng)
+            mutate_individual(child, rng, cfg)
             childs.append(child)
 
         for child in childs:
             child.fitness = evaluate(child)
 
-        parents = select_survivors(parents, childs)
+        parents = select_survivors(parents, childs, mode=cfg.selection_mode, mu=cfg.mu)
 
         best_fitness: float = parents[0].fitness
-        if gen % cfg.LOG_INTERVAL == 0 or gen == 1:
+        if gen % cfg.log_interval == 0 or gen == 1:
             print(f"  Gen {gen:>4d} | Best fitness: {best_fitness:.6e}")
 
-        if cfg.ENABLE_TRACE_LOG:
+        if cfg.enable_trace_log:
             _log_trace(gen, parents[0])
 
     print("\n[ES] Optimization complete.")
@@ -106,23 +108,20 @@ def run() -> None:
 def run_model(generations: int | None = None, log_interval: int | None = None) -> ModelSummary:
     start = time.perf_counter()
 
-    old_generations = cfg.MAX_GENERATIONS
-    old_log_interval = cfg.LOG_INTERVAL
-
-    if generations is not None:
-        cfg.MAX_GENERATIONS = generations
-    if log_interval is not None:
-        cfg.LOG_INTERVAL = log_interval
+    cfg = ESConfig(
+        max_generations=generations if generations is not None else DEFAULT_MODEL_GENERATIONS,
+        log_interval=log_interval if log_interval is not None else DEFAULT_MODEL_LOG_INTERVAL,
+    )
 
     try:
         print("[WORKFLOW] model")
         print("[STATUS] running")
-        print(f"[CONFIG] generations={cfg.MAX_GENERATIONS} | log_interval={cfg.LOG_INTERVAL}")
-        run()
+        print(f"[CONFIG] generations={cfg.max_generations} | log_interval={cfg.log_interval}")
+        run(cfg)
         status = "success"
-    finally:
-        cfg.MAX_GENERATIONS = old_generations
-        cfg.LOG_INTERVAL = old_log_interval
+    except Exception as e:
+        status = f"failed: {e}"
+        raise
 
     elapsed = time.perf_counter() - start
     print("[WORKFLOW] model")
@@ -133,7 +132,7 @@ def run_model(generations: int | None = None, log_interval: int | None = None) -
         workflow="model",
         status=status,
         elapsed_seconds=elapsed,
-        generations=cfg.MAX_GENERATIONS,
+        generations=cfg.max_generations,
     )
 
 
@@ -152,7 +151,20 @@ def run_benchmarks(dim: int = 10, max_evals: int = 10_000, n_seeds: int = 10) ->
         for rname, runner in RUNNERS.items():
             traces = []
             for seed in seeds:
-                trace = runner(binfo["fn"], b_dim, binfo["bounds"], seed, max_evals)
+                if rname == "Prototype 1":
+                    proto_config = ESConfig(
+                        n_real=b_dim,
+                        n_count=0,
+                        n_binary=0,
+                        n_categorical=0,
+                        n_fuzzy=0,
+                        lower_bound_real=float(binfo["bounds"][0]),
+                        upper_bound_real=float(binfo["bounds"][1]),
+                        seed=seed,
+                    )
+                    trace = runner(binfo["fn"], b_dim, binfo["bounds"], seed, max_evals, config=proto_config)
+                else:
+                    trace = runner(binfo["fn"], b_dim, binfo["bounds"], seed, max_evals)
                 traces.append(trace)
             results[bname][rname] = np.array(traces)
             median_final = np.median(traces, axis=0)[-1]
@@ -328,7 +340,7 @@ def _run_selected_mode(mode: str, options: dict[str, int | None]) -> None:
         log_interval = options.get("log_interval")
         dim = _resolve_int(options.get("dim"), DEFAULT_BENCHMARK_DIM)
         max_evals = _resolve_int(options.get("max_evals"), DEFAULT_BENCHMARK_MAX_EVALS)
-        seeds = _resolve_int(options.get("seeds"), DEFAULT_BENCHMARK_SEEDS)
+        seeds = _resolve_int(options.get("seeds"), DEFAULT_SMOKE_SEEDS)
 
         print("[WORKFLOW] all")
         print("[STATUS] running")
