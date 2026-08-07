@@ -31,6 +31,7 @@ class Individual:
     binary: NDArray[np.uint8] = field(default_factory=lambda: np.zeros(0, dtype=np.uint8))
     categorical: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
+    circular: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
 
     # Strategy Parameters
     sigma_real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
@@ -38,6 +39,7 @@ class Individual:
     sigma_fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_binary: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
     logit_cat: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
+    logit_circular: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
 
     # Fitness
     fitness: float = float("inf")
@@ -47,7 +49,7 @@ class Individual:
         """
         Return a single flattened scalar array of all decision variable blocks.
 
-        Order: real → count → binary → categorical → fuzzy control points.
+        Order: real → count → binary → categorical → fuzzy control points → circular.
         Excludes all strategy parameters (sigmas/logits).
         Used exclusively for logging and plotting.
         """
@@ -57,6 +59,7 @@ class Individual:
             self.binary.astype(np.float64),
             self.categorical.astype(np.float64),
             self.fuzzy.astype(np.float64),
+            self.circular.astype(np.float64),
         ])
 
 
@@ -100,17 +103,25 @@ def create_random_individual(
 
     fuzzy_vars = _random_fuzzy_points(rng, cfg.n_fuzzy) if cfg.n_fuzzy > 0 else np.zeros(0, dtype=np.float64)
 
+    circular_vars = (
+        np.array([rng.integers(0, int(k)) for k in cfg.circular_k], dtype=np.int64)
+        if cfg.n_circular > 0
+        else np.zeros(0, dtype=np.int64)
+    )
+
     ind = Individual(
         real=real_vars,
         count=count_vars,
         binary=binary_vars,
         categorical=cat_vars,
         fuzzy=fuzzy_vars,
+        circular=circular_vars,
         sigma_real=np.full(cfg.n_real, cfg.init_sigma_real, dtype=np.float64),
         lambda_count=np.full(cfg.n_count, cfg.init_lambda_count, dtype=np.float64),
         sigma_fuzzy=np.full(cfg.n_fuzzy * 3, cfg.init_sigma_fuzzy, dtype=np.float64),
         logit_binary=np.full(cfg.n_binary, cfg.init_logit_binary, dtype=np.float64),
-        logit_cat=np.full(cfg.n_categorical, cfg.init_logit_cat, dtype=np.float64),
+        logit_cat=np.full(cfg.total_cat_logits, cfg.init_logit_cat, dtype=np.float64),
+        logit_circular=np.full(cfg.n_circular, cfg.init_logit_circular, dtype=np.float64),
     )
     return ind
 
@@ -143,11 +154,13 @@ def clone_individual(parent: Individual) -> Individual:
         binary=parent.binary.copy(),
         categorical=parent.categorical.copy(),
         fuzzy=parent.fuzzy.copy(),
+        circular=parent.circular.copy(),
         sigma_real=parent.sigma_real.copy(),
         lambda_count=parent.lambda_count.copy(),
         sigma_fuzzy=parent.sigma_fuzzy.copy(),
         logit_binary=parent.logit_binary.copy(),
         logit_cat=parent.logit_cat.copy(),
+        logit_circular=parent.logit_circular.copy(),
         fitness=parent.fitness,
     )
 
@@ -177,6 +190,7 @@ def mutate_individual(
     ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, tau_prime, tau, cfg.sigma_floor)
     ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, tau)
     ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, tau)
+    ind.logit_circular = kernels.adapt_logits(ind.logit_circular, rng, tau)
 
     # Mutate Decision Variables
     ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng, cfg.real_bounds)
@@ -184,6 +198,7 @@ def mutate_individual(
     ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng)
     ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng, cfg.categorical_k)
     ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng, cfg.n_fuzzy, cfg.fuzzy_epsilon)
+    ind.circular = kernels.mutate_circular(ind.circular, ind.logit_circular, rng, cfg.circular_k)
 
 
 # -----------------------------------------------------------------------------

@@ -31,10 +31,16 @@ class ESConfig:
     n_binary: int = 8              # Number of binary variables
     n_categorical: int = 3         # Number of categorical variables
     n_fuzzy: int = 4               # Number of fuzzy variables
+    n_circular: int = 0             # Number of circular variables (opt-in)
 
     # Categorical cardinalities: number of categories per categorical variable
     categorical_k: NDArray[np.int64] = field(
         default_factory=lambda: np.array([3, 4, 5], dtype=np.int64)
+    )
+
+    # Circular cardinalities: number of discrete positions per circular variable
+    circular_k: NDArray[np.int64] = field(
+        default_factory=lambda: np.array([], dtype=np.int64)
     )
 
     # -----------------------------------------------------------------------------
@@ -62,6 +68,7 @@ class ESConfig:
     init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
     init_logit_binary: float = 0.0  # Initial logit for binary flip probability (p=0.5)
     init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
+    init_logit_circular: float = 0.0 # Initial forward logit for circular variables (p_f=0.5)
 
     # -----------------------------------------------------------------------------
     # 6. Fuzzy Structural Constants
@@ -81,7 +88,19 @@ class ESConfig:
     @property
     def n_total(self) -> int:
         """Total active genome dimensionality used for learning-rate computation."""
-        return self.n_real + self.n_count + self.n_binary + self.n_categorical + self.n_fuzzy * 3
+        return (
+            self.n_real
+            + self.n_count
+            + self.n_binary
+            + self.n_categorical
+            + self.n_fuzzy * 3
+            + self.n_circular
+        )
+
+    @property
+    def total_cat_logits(self) -> int:
+        """Total number of logit dimensions for all categorical variables."""
+        return int(np.sum(self.categorical_k)) if self.n_categorical > 0 else 0
 
     @property
     def real_bounds(self) -> NDArray[np.float64]:

@@ -128,8 +128,24 @@ def adapt_logits(
 
 
 def sigmoid(logits: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Map logits to probabilities in (0, 1) via the sigmoid function."""
-    return 1.0 / (1.0 + np.exp(-logits))
+    """Map logits to probabilities in (0, 1) via the sigmoid function.
+
+    Logits are temporarily clipped to [-700, 700] to prevent float64 overflow
+    (exp(700) ~ 1e304), while the underlying genotype retains its full value.
+    """
+    clipped = np.clip(logits, -700.0, 700.0)
+    return 1.0 / (1.0 + np.exp(-clipped))
+
+
+def softmax(logits: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Numerically stable softmax over a 1-D logit vector.
+
+    Subtracts the max before exponentiating to avoid overflow.
+    Returns a valid probability distribution (sums to 1).
+    """
+    shifted = logits - np.max(logits)
+    exps = np.exp(shifted)
+    return exps / exps.sum()
 
 
 # -----------------------------------------------------------------------------
@@ -268,27 +284,34 @@ def mutate_binary(
 
 
 # -----------------------------------------------------------------------------
-# 5. Categorical Re-Sampling (Excluding Current Index)
+# 5. Categorical Mutation via Softmax Logit Vectors
 # -----------------------------------------------------------------------------
 
 def mutate_categorical(
     values: NDArray[np.int64],
-    logits: NDArray[np.float64],
+    cat_logits: NDArray[np.float64],
     rng: np.random.Generator,
     categorical_k: NDArray[np.int64],
 ) -> NDArray[np.int64]:
     """
-    Categorical mutation: Bernoulli trial triggers uniform re-sample.
+    Categorical mutation using per-variable softmax logit vectors.
 
-    For each variable, if the trial fires (prob from logit), the gene is
-    re-sampled uniformly from all categories EXCEPT the current value.
+    Each categorical variable has a logit vector of size C (its cardinality).
+    The genotype consists of C independent real values that evolve via
+    self-adaptive Gaussian perturbation. The phenotype (selected category)
+    is obtained by applying softmax over the logit vector to produce a
+    probability distribution, then sampling from it.
+
+    This guarantees a valid probability distribution (sum = 1) and preserves
+    evolutionary inertia through stochastic sampling.
 
     Parameters
     ----------
     values : ndarray of int64
-        Current categorical indices.
-    logits : ndarray of float64
-        Adapted logit parameters for mutation probability.
+        Current categorical indices (one per variable).
+    cat_logits : ndarray of float64
+        Flattened logit vectors, shape (sum(categorical_k),).
+        Sliced per variable using categorical_k.
     rng : numpy Generator
     categorical_k : ndarray of int64
         Number of categories per categorical variable.
@@ -300,22 +323,67 @@ def mutate_categorical(
     """
     if values.shape[0] == 0:
         return values.copy()
-    probs: NDArray[np.float64] = sigmoid(logits)
-    trigger: NDArray[np.bool_] = rng.random(values.shape[0]) < probs
 
     mutated = values.copy()
-    for i in np.where(trigger)[0]:
-        k = int(categorical_k[i])
-        current = int(values[i])
-        # Uniform sample from alternatives (exclude current).
-        alternatives = np.delete(np.arange(k, dtype=np.int64), current)
-        mutated[i] = rng.choice(alternatives)
+    offset = 0
+    for i, k in enumerate(categorical_k):
+        k_int = int(k)
+        logit_slice = cat_logits[offset:offset + k_int]
+        probs = softmax(logit_slice)
+        mutated[i] = rng.choice(k_int, p=probs)
+        offset += k_int
 
     return mutated
 
 
 # -----------------------------------------------------------------------------
-# 6. Fuzzy Perturbation with Reflection and Monotonic Enforcement
+# 6. Circular Mutation (Forward/Backward Step)
+# -----------------------------------------------------------------------------
+
+def mutate_circular(
+    values: NDArray[np.int64],
+    logits: NDArray[np.float64],
+    rng: np.random.Generator,
+    circular_k: NDArray[np.int64],
+) -> NDArray[np.int64]:
+    """
+    Circular mutation for variables with a closed order (e.g., days of the week).
+
+    Each circular variable stores a forward-probability logit. The forward
+    probability is p_f = sigmoid(logit), and the backward probability is
+    p_b = 1 - p_f. The variable steps forward (+1 mod k) with probability p_f,
+    or backward (-1 mod k) with probability p_b.
+
+    Parameters
+    ----------
+    values : ndarray of int64
+        Current circular indices.
+    logits : ndarray of float64
+        Forward-probability logits (one per variable).
+    rng : numpy Generator
+    circular_k : ndarray of int64
+        Cardinality (number of discrete positions) per circular variable.
+
+    Returns
+    -------
+    ndarray of int64
+        Mutated circular indices.
+    """
+    if values.shape[0] == 0:
+        return values.copy()
+
+    p_forward: NDArray[np.float64] = sigmoid(logits)
+    rolls: NDArray[np.float64] = rng.random(values.shape[0])
+
+    # Forward step where roll < p_f, backward step otherwise.
+    steps = np.where(rolls < p_forward, 1, -1).astype(np.int64)
+    mutated = (values + steps) % circular_k
+
+    return mutated
+
+
+# -----------------------------------------------------------------------------
+# 7. Fuzzy Perturbation with Reflection and Monotonic Enforcement
 # -----------------------------------------------------------------------------
 
 def _reflect_unit(x: NDArray[np.float64]) -> NDArray[np.float64]:
