@@ -134,7 +134,6 @@ flowchart TD
 TFG/
 ├── README.md                              # Main documentation (this file)
 ├── requirements.txt                       # Python dependencies
-├── docs/                                  # Technical documentation docs
 ├── openspec/                              # OpenSpec design specifications
 ├── src/                                   # Source code
 │   ├── es_model/                          #   Heterogeneous ES Engine
