@@ -63,6 +63,70 @@ class Individual:
         ])
 
 
+@dataclass
+class UnpackedGenome:
+    """Convenience container for un-concatenated decision variable blocks."""
+    real: NDArray[np.float64]
+    count: NDArray[np.int64]
+    binary: NDArray[np.uint8]
+    categorical: NDArray[np.int64]
+    fuzzy: NDArray[np.float64]
+    circular: NDArray[np.int64]
+
+
+def unpack_genome(x_or_ind: Individual | NDArray[np.float64], config: ESConfig | None = None) -> UnpackedGenome:
+    """
+    Safely extract all 6 decision variable blocks from either an Individual object
+    or a 1-D flattened genome NumPy array.
+    """
+    cfg = config if config is not None else DEFAULT_CONFIG
+
+    if isinstance(x_or_ind, Individual):
+        return UnpackedGenome(
+            real=x_or_ind.real,
+            count=x_or_ind.count,
+            binary=x_or_ind.binary,
+            categorical=x_or_ind.categorical,
+            fuzzy=x_or_ind.fuzzy,
+            circular=x_or_ind.circular,
+        )
+
+    vec = np.asarray(x_or_ind, dtype=np.float64)
+    offset = 0
+
+    # 1. Real
+    real = vec[offset : offset + cfg.n_real]
+    offset += cfg.n_real
+
+    # 2. Count
+    count = np.round(vec[offset : offset + cfg.n_count]).astype(np.int64)
+    offset += cfg.n_count
+
+    # 3. Binary
+    binary = (vec[offset : offset + cfg.n_binary] >= 0.5).astype(np.uint8)
+    offset += cfg.n_binary
+
+    # 4. Categorical
+    cat = np.round(vec[offset : offset + cfg.n_categorical]).astype(np.int64)
+    offset += cfg.n_categorical
+
+    # 5. Fuzzy (triplets)
+    fuzzy = vec[offset : offset + cfg.n_fuzzy * 3]
+    offset += cfg.n_fuzzy * 3
+
+    # 6. Circular
+    circ = np.round(vec[offset : offset + cfg.n_circular]).astype(np.int64)
+
+    return UnpackedGenome(
+        real=real,
+        count=count,
+        binary=binary,
+        categorical=cat,
+        fuzzy=fuzzy,
+        circular=circ,
+    )
+
+
 # -----------------------------------------------------------------------------
 # 2. Random Initialization
 # -----------------------------------------------------------------------------
@@ -292,7 +356,9 @@ class HeterogeneousES:
         for ind in self.parents:
             eval_input = ind.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else ind.genome
             ind.fitness = fn(eval_input)
-            self.best_so_far = min(self.best_so_far, ind.fitness)
+            if ind.fitness < self.best_so_far:
+                self.best_so_far = ind.fitness
+                self.best_individual = clone_individual(ind)
             trace.append(self.best_so_far)
             if len(trace) >= max_evals:
                 return np.array(trace[:max_evals], dtype=np.float64)
@@ -307,7 +373,9 @@ class HeterogeneousES:
                 mutate_individual(child, self.rng, self.config)
                 eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
                 child.fitness = fn(eval_input)
-                self.best_so_far = min(self.best_so_far, child.fitness)
+                if child.fitness < self.best_so_far:
+                    self.best_so_far = child.fitness
+                    self.best_individual = clone_individual(child)
                 trace.append(self.best_so_far)
                 childs.append(child)
                 if len(trace) >= max_evals:
