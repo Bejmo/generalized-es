@@ -230,8 +230,85 @@ def clone_individual(parent: Individual) -> Individual:
 
 
 # -----------------------------------------------------------------------------
-# 4. Child Mutation Pipeline
+# 4. Child Recombination & Mutation Pipeline
 # -----------------------------------------------------------------------------
+
+def _global_intermediate(
+    base_params: NDArray[np.float64],
+    parents: list[Individual],
+    attr_name: str,
+    rng: np.random.Generator,
+) -> NDArray[np.float64]:
+    """Global intermediate recombination for a strategy parameter vector."""
+    n = base_params.shape[0]
+    if n == 0:
+        return base_params.copy()
+    result = base_params.copy()
+    mu = len(parents)
+    for j in range(n):
+        second_idx = rng.integers(0, mu)
+        second_val = getattr(parents[second_idx], attr_name)[j]
+        result[j] = (result[j] + second_val) / 2.0
+    return result
+
+
+def recombine_individual(
+    parent_a: Individual,
+    parents: list[Individual],
+    rng: np.random.Generator,
+    config: ESConfig | None = None,
+) -> Individual:
+    """
+    Create a child individual via recombination.
+
+    - Objective variables: Dual discrete recombination (two distinct parents
+      chosen at random for each offspring; 50% probability per gene).
+    - Strategy parameters: Global intermediate recombination (for each gene,
+      averages base parent value with a random second parent's value).
+    """
+    cfg = config if config is not None else DEFAULT_CONFIG
+    mu = len(parents)
+
+    child = clone_individual(parent_a)
+    if mu <= 1:
+        return child
+
+    # Select a second distinct parent for discrete recombination
+    idx_b = rng.integers(0, mu)
+    while parents[idx_b] is parent_a and mu > 1:
+        idx_b = rng.integers(0, mu)
+    parent_b = parents[idx_b]
+
+    # 1. Dual discrete recombination for decision variables
+    if cfg.n_real > 0 and len(child.real) > 0:
+        mask = rng.random(cfg.n_real) < 0.5
+        child.real = np.where(mask, parent_a.real, parent_b.real)
+    if cfg.n_count > 0 and len(child.count) > 0:
+        mask = rng.random(cfg.n_count) < 0.5
+        child.count = np.where(mask, parent_a.count, parent_b.count)
+    if cfg.n_binary > 0 and len(child.binary) > 0:
+        mask = rng.random(cfg.n_binary) < 0.5
+        child.binary = np.where(mask, parent_a.binary, parent_b.binary)
+    if cfg.n_categorical > 0 and len(child.categorical) > 0:
+        mask = rng.random(cfg.n_categorical) < 0.5
+        child.categorical = np.where(mask, parent_a.categorical, parent_b.categorical)
+    if cfg.n_fuzzy > 0 and len(child.fuzzy) > 0:
+        mask = rng.random(cfg.n_fuzzy * 3) < 0.5
+        child.fuzzy = np.where(mask, parent_a.fuzzy, parent_b.fuzzy)
+    if cfg.n_circular > 0 and len(child.circular) > 0:
+        mask = rng.random(cfg.n_circular) < 0.5
+        child.circular = np.where(mask, parent_a.circular, parent_b.circular)
+
+    # 2. Global intermediate recombination for strategy parameters
+    child.sigma_real = _global_intermediate(parent_a.sigma_real, parents, "sigma_real", rng)
+    child.lambda_count = _global_intermediate(parent_a.lambda_count, parents, "lambda_count", rng)
+    child.sigma_fuzzy = _global_intermediate(parent_a.sigma_fuzzy, parents, "sigma_fuzzy", rng)
+    child.logit_binary = _global_intermediate(parent_a.logit_binary, parents, "logit_binary", rng)
+    child.logit_cat = _global_intermediate(parent_a.logit_cat, parents, "logit_cat", rng)
+    child.logit_circular = _global_intermediate(parent_a.logit_circular, parents, "logit_circular", rng)
+
+    return child
+
 
 def mutate_individual(
     ind: Individual,
@@ -325,12 +402,15 @@ class HeterogeneousES:
 
     def step(self, fn: Callable) -> float:
         """Execute one generational step."""
+        if not self.parents:
+            self.init_population(fn)
+
         self.generation += 1
         childs: list[Individual] = []
 
         for _ in range(self.config.lam):
             parent_idx = self.rng.integers(0, self.config.mu)
-            child = clone_individual(self.parents[parent_idx])
+            child = recombine_individual(self.parents[parent_idx], self.parents, self.rng, self.config)
             mutate_individual(child, self.rng, self.config)
             eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
             child.fitness = fn(eval_input)
@@ -348,17 +428,9 @@ class HeterogeneousES:
     def optimize(self, fn: Callable, max_evals: int) -> NDArray[np.float64]:
         """Full optimization loop returning 1-D trace of best fitness per evaluation."""
         trace: list[float] = []
-        self.parents = [create_random_individual(self.rng, self.config) for _ in range(self.config.mu)]
-        self.evaluations = 0
-        self.generation = 0
-        self.best_so_far = float("inf")
+        self.init_population(fn)
 
         for ind in self.parents:
-            eval_input = ind.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else ind.genome
-            ind.fitness = fn(eval_input)
-            if ind.fitness < self.best_so_far:
-                self.best_so_far = ind.fitness
-                self.best_individual = clone_individual(ind)
             trace.append(self.best_so_far)
             if len(trace) >= max_evals:
                 return np.array(trace[:max_evals], dtype=np.float64)
@@ -369,13 +441,16 @@ class HeterogeneousES:
 
             for _ in range(self.config.lam):
                 parent_idx = self.rng.integers(0, self.config.mu)
-                child = clone_individual(self.parents[parent_idx])
+                child = recombine_individual(self.parents[parent_idx], self.parents, self.rng, self.config)
                 mutate_individual(child, self.rng, self.config)
                 eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
                 child.fitness = fn(eval_input)
+                self.evaluations += 1
+
                 if child.fitness < self.best_so_far:
                     self.best_so_far = child.fitness
                     self.best_individual = clone_individual(child)
+
                 trace.append(self.best_so_far)
                 childs.append(child)
                 if len(trace) >= max_evals:
@@ -385,3 +460,4 @@ class HeterogeneousES:
                 self.parents = select_survivors(self.parents, childs, mode=self.config.selection_mode, mu=self.config.mu)
 
         return np.array(trace[:max_evals], dtype=np.float64)
+

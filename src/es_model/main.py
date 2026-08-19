@@ -18,7 +18,7 @@ from src.benchmarks.functions import BENCHMARKS
 from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 from .config import DEFAULT_CONFIG, ESConfig
-from .engine import Individual, HeterogeneousES, clone_individual, create_random_individual, mutate_individual, select_survivors
+from .engine import Individual, HeterogeneousES
 
 RUNNERS = {
     "Prototype 1": custom_es.run,
@@ -56,22 +56,16 @@ class BenchmarkSummary:
     seeds: int
 
 
-def evaluate(ind: Individual) -> float:
-    """
-    Default fitness function: Sphere (evaluated on real variables).
-    """
-    return float(np.sum(ind.real ** 2))
+def default_eval_fn(x: np.ndarray) -> float:
+    """Default fitness function: Sphere."""
+    return float(np.sum(x ** 2))
 
 
 def run(config: ESConfig | None = None) -> None:
-    """Execute the ES generational loop using ESConfig."""
+    """Execute the ES generational loop using ESConfig and HeterogeneousES engine."""
     cfg = config if config is not None else DEFAULT_CONFIG
     es = HeterogeneousES(cfg)
-    rng = es.rng
-
-    parents: list[Individual] = [create_random_individual(rng, cfg) for _ in range(cfg.mu)]
-    for ind in parents:
-        ind.fitness = evaluate(ind)
+    es.init_population(default_eval_fn)
 
     print(f"[ES] Mode={cfg.selection_mode} | mu={cfg.mu}, lambda={cfg.lam}")
     print(
@@ -81,28 +75,19 @@ def run(config: ESConfig | None = None) -> None:
     print(f"[ES] Starting optimization for {cfg.max_generations} generations...\n")
 
     for gen in range(1, cfg.max_generations + 1):
-        childs: list[Individual] = []
-        for _ in range(cfg.lam):
-            parent_idx = rng.integers(0, cfg.mu)
-            child = clone_individual(parents[parent_idx])
-            mutate_individual(child, rng, cfg)
-            childs.append(child)
+        best_fitness = es.step(default_eval_fn)
 
-        for child in childs:
-            child.fitness = evaluate(child)
-
-        parents = select_survivors(parents, childs, mode=cfg.selection_mode, mu=cfg.mu)
-
-        best_fitness: float = parents[0].fitness
         if gen % cfg.log_interval == 0 or gen == 1:
             print(f"  Gen {gen:>4d} | Best fitness: {best_fitness:.6e}")
 
-        if cfg.enable_trace_log:
-            _log_trace(gen, parents[0])
+        if cfg.enable_trace_log and es.best_individual is not None:
+            _log_trace(gen, es.best_individual)
 
     print("\n[ES] Optimization complete.")
-    print(f"[ES] Final best fitness: {parents[0].fitness:.6e}")
-    print(f"[ES] Best genome (flattened): {parents[0].genome}")
+    print(f"[ES] Final best fitness: {es.best_so_far:.6e}")
+    if es.best_individual is not None:
+        print(f"[ES] Best genome (flattened): {es.best_individual.genome}")
+
 
 
 def run_model(generations: int | None = None, log_interval: int | None = None) -> ModelSummary:

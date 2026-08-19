@@ -11,34 +11,7 @@ from numpy.typing import NDArray
 
 
 # -----------------------------------------------------------------------------
-# 1. Global Learning-Rate Computation
-# -----------------------------------------------------------------------------
-
-def compute_learning_rates(n_total: int) -> tuple[float, float]:
-    """
-    Compute the global and local learning rates for log-normal self-adaptation.
-
-    tau'  = 1 / sqrt(2 * n_total)       — global component (shared noise)
-    tau   = 1 / sqrt(2 * sqrt(n_total)) — local component (per-dimension noise)
-
-    Parameters
-    ----------
-    n_total : int
-        Total number of active genome dimensions across all blocks.
-
-    Returns
-    -------
-    (tau_prime, tau) : tuple of float
-    """
-    if n_total == 0:
-        return 0.0, 0.0
-    tau_prime: float = 1.0 / np.sqrt(2.0 * n_total)
-    tau: float = 1.0 / np.sqrt(2.0 * np.sqrt(n_total))
-    return tau_prime, tau
-
-
-# -----------------------------------------------------------------------------
-# 2. Log-Normal Adaptation for Scale-Like Strategy Parameters
+# 1. Log-Normal Adaptation for Scale-Like Strategy Parameters
 # -----------------------------------------------------------------------------
 
 def adapt_scales(
