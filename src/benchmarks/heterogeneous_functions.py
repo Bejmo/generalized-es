@@ -1,5 +1,5 @@
 """
-heterogeneous_functions.py — Synthetic mixed-variable benchmark functions.
+Synthetic mixed-variable benchmark functions.
 
 Provides synthetic benchmark landscapes (Sphere, Rastrigin, Coupled) that test
 all 6 decision variable types co-evolving in the Heterogeneous ES:
