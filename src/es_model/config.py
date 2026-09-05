@@ -60,6 +60,7 @@ class ESConfig:
     # 4. Self-Adaptation Constants
     # -----------------------------------------------------------------------------
     sigma_floor: float = 1e-6      # Stability floor for strategy parameters
+    sigma_ceiling_fuzzy: float = 0.5  # Maximum sigma for fuzzy [0,1] domain (prevents drift)
 
     # -----------------------------------------------------------------------------
     # 5. Initial Strategy Parameter Defaults

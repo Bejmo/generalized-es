@@ -329,6 +329,8 @@ def mutate_individual(
     ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng, tau_prime, tau, cfg.sigma_floor)
     ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng, tau_prime, tau, cfg.sigma_floor)
     ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, tau_prime, tau, cfg.sigma_floor)
+    # Clamp fuzzy sigmas to ceiling: prevents drift in bounded [0,1] domain
+    np.minimum(ind.sigma_fuzzy, cfg.sigma_ceiling_fuzzy, out=ind.sigma_fuzzy)
     ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, tau)
     ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, tau)
     ind.logit_circular = kernels.adapt_logits(ind.logit_circular, rng, tau)
