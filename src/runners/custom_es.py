@@ -2,6 +2,8 @@
 Runner wrapper for the custom heterogeneous (mu, lambda)-ES.
 """
 
+from copy import copy
+
 import numpy as np
 from src.es_model.config import ESConfig
 from src.es_model.engine import HeterogeneousES
@@ -26,9 +28,7 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, config: ESConfig | 
             seed=seed,
         )
     else:
-        cfg = config
-        cfg.mu = mu
-        cfg.lam = lam
+        cfg = copy(config)
         cfg.seed = seed
 
     es = HeterogeneousES(config=cfg, seed=seed)
