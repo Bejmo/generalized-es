@@ -1,6 +1,8 @@
 # Heterogeneous Evolution Strategies for Mixed-Variable Optimization
 
-An experimental framework for **Heterogeneous Evolution Strategies (ES)** supporting mixed-variable optimization under $(\mu, \lambda)$ and $(\mu + \lambda)$ selection schemes with log-normal/logit-normal self-adaptation. Includes benchmark suites and comparison runners against baseline optimizers (*Isotropic ES*, *sep-CMA-ES*, and *Standard CMA-ES*).
+An experimental TFG from a student from the FIB UPC, on the Computer Science especialization.
+
+This framework implements a **Heterogeneous Evolution Strategies (ES)** supporting mixed-variable optimization under $(\mu, \lambda)$ and $(\mu + \lambda)$ selection schemes with log-normal/logit-normal self-adaptation. Includes benchmark suites and comparison runners against baseline optimizers (*Isotropic ES*, *sep-CMA-ES*, and *Standard CMA-ES*).
 
 ---
 
