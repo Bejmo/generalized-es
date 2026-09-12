@@ -6,7 +6,7 @@ This module exposes:
 - A simple terminal interface to run model, benchmarks, smoke, or all.
 """
 
-from __future__ import annotations
+from __future__ import annotations # Annotation in return values in functions
 
 import argparse
 import time
