@@ -1,17 +1,28 @@
 """
-Defines the Individual data class, child cloning, deterministic rank-based
-survivor selection for both (mu, lambda) and (mu + lambda) modes, and the
-HeterogeneousES optimizer class.
+engine.py — Evolutionary algorithm engine, Individual representation, and selection.
+
+Defines the Individual class (encapsulating VariableBlock instances), child cloning,
+recombination, mutation pipelines, deterministic rank-based survivor selection,
+and the HeterogeneousES optimizer class.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Callable
-
 import numpy as np
 from numpy.typing import NDArray
 
 from .config import DEFAULT_CONFIG, ESConfig
-from . import kernels
+from .blocks import (
+    VariableBlock,
+    RealBlock,
+    CountBlock,
+    BinaryBlock,
+    CategoricalBlock,
+    FuzzyBlock,
+    CircularBlock,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -22,26 +33,12 @@ from . import kernels
 class Individual:
     """
     A single candidate solution in the heterogeneous ES.
-    Strategy parameters co-evolve with the genome via self-adaptation.
+
+    Decision variables and co-evolving strategy parameters are encapsulated
+    in modular, vectorized VariableBlock instances inside the `blocks` dictionary.
     """
 
-    # Decision Variable Blocks
-    real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    count: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
-    binary: NDArray[np.uint8] = field(default_factory=lambda: np.zeros(0, dtype=np.uint8))
-    categorical: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
-    fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    circular: NDArray[np.int64] = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
-
-    # Strategy Parameters
-    sigma_real: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    lambda_count: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    sigma_fuzzy: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    logit_binary: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    logit_cat: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-    logit_circular: NDArray[np.float64] = field(default_factory=lambda: np.zeros(0))
-
-    # Fitness
+    blocks: dict[str, VariableBlock] = field(default_factory=dict)
     fitness: float = float("inf")
 
     @property
@@ -49,23 +46,21 @@ class Individual:
         """
         Return a single flattened scalar array of all decision variable blocks.
 
-        Order: real → count → binary → categorical → fuzzy control points → circular.
-        Excludes all strategy parameters (sigmas/logits).
-        Used exclusively for logging and plotting.
+        Canonical Order: real -> count -> binary -> categorical -> fuzzy -> circular.
+        Excludes all strategy parameters.
+        Used for logging, plotting, and scalar evaluation functions.
         """
-        return np.concatenate([
-            self.real.astype(np.float64),
-            self.count.astype(np.float64),
-            self.binary.astype(np.float64),
-            self.categorical.astype(np.float64),
-            self.fuzzy.astype(np.float64),
-            self.circular.astype(np.float64),
-        ])
+        canonical_order = ["real", "count", "binary", "categorical", "fuzzy", "circular"]
+        parts = [self.blocks[k].flatten() for k in canonical_order if k in self.blocks]
+        if not parts:
+            return np.zeros(0, dtype=np.float64)
+        return np.concatenate(parts)
 
 
 @dataclass
 class UnpackedGenome:
     """Convenience container for un-concatenated decision variable blocks."""
+
     real: NDArray[np.float64]
     count: NDArray[np.int64]
     binary: NDArray[np.uint8]
@@ -74,7 +69,10 @@ class UnpackedGenome:
     circular: NDArray[np.int64]
 
 
-def unpack_genome(x_or_ind: Individual | NDArray[np.float64], config: ESConfig | None = None) -> UnpackedGenome:
+def unpack_genome(
+    x_or_ind: Individual | NDArray[np.float64],
+    config: ESConfig | None = None,
+) -> UnpackedGenome:
     """
     Safely extract all 6 decision variable blocks from either an Individual object
     or a 1-D flattened genome NumPy array.
@@ -83,12 +81,36 @@ def unpack_genome(x_or_ind: Individual | NDArray[np.float64], config: ESConfig |
 
     if isinstance(x_or_ind, Individual):
         return UnpackedGenome(
-            real=x_or_ind.real,
-            count=x_or_ind.count,
-            binary=x_or_ind.binary,
-            categorical=x_or_ind.categorical,
-            fuzzy=x_or_ind.fuzzy,
-            circular=x_or_ind.circular,
+            real=(
+                x_or_ind.blocks["real"].values.astype(np.float64)
+                if "real" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.float64)
+            ),
+            count=(
+                x_or_ind.blocks["count"].values.astype(np.int64)
+                if "count" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.int64)
+            ),
+            binary=(
+                x_or_ind.blocks["binary"].values.astype(np.uint8)
+                if "binary" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.uint8)
+            ),
+            categorical=(
+                x_or_ind.blocks["categorical"].values.astype(np.int64)
+                if "categorical" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.int64)
+            ),
+            fuzzy=(
+                x_or_ind.blocks["fuzzy"].values.astype(np.float64)
+                if "fuzzy" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.float64)
+            ),
+            circular=(
+                x_or_ind.blocks["circular"].values.astype(np.int64)
+                if "circular" in x_or_ind.blocks
+                else np.zeros(0, dtype=np.int64)
+            ),
         )
 
     vec = np.asarray(x_or_ind, dtype=np.float64)
@@ -137,68 +159,22 @@ def create_random_individual(
 ) -> Individual:
     """Create a randomly initialized individual within configured bounds."""
     cfg = config if config is not None else DEFAULT_CONFIG
+    blocks: dict[str, VariableBlock] = {}
 
-    real_b = cfg.real_bounds
-    count_b = cfg.count_bounds
+    if cfg.n_real > 0:
+        blocks["real"] = RealBlock.random(cfg, rng)
+    if cfg.n_count > 0:
+        blocks["count"] = CountBlock.random(cfg, rng)
+    if cfg.n_binary > 0:
+        blocks["binary"] = BinaryBlock.random(cfg, rng)
+    if cfg.n_categorical > 0:
+        blocks["categorical"] = CategoricalBlock.random(cfg, rng)
+    if cfg.n_fuzzy > 0:
+        blocks["fuzzy"] = FuzzyBlock.random(cfg, rng)
+    if cfg.n_circular > 0:
+        blocks["circular"] = CircularBlock.random(cfg, rng)
 
-    real_vars = (
-        rng.uniform(real_b[:, 0], real_b[:, 1]).astype(np.float64)
-        if cfg.n_real > 0
-        else np.zeros(0, dtype=np.float64)
-    )
-
-    count_vars = (
-        rng.integers(count_b[:, 0], count_b[:, 1] + 1, dtype=np.int64)
-        if cfg.n_count > 0
-        else np.zeros(0, dtype=np.int64)
-    )
-
-    binary_vars = (
-        rng.integers(0, 2, size=cfg.n_binary, dtype=np.uint8)
-        if cfg.n_binary > 0
-        else np.zeros(0, dtype=np.uint8)
-    )
-
-    cat_vars = (
-        np.array([rng.integers(0, int(k)) for k in cfg.categorical_k], dtype=np.int64)
-        if cfg.n_categorical > 0
-        else np.zeros(0, dtype=np.int64)
-    )
-
-    fuzzy_vars = _random_fuzzy_points(rng, cfg.n_fuzzy) if cfg.n_fuzzy > 0 else np.zeros(0, dtype=np.float64)
-
-    circular_vars = (
-        np.array([rng.integers(0, int(k)) for k in cfg.circular_k], dtype=np.int64)
-        if cfg.n_circular > 0
-        else np.zeros(0, dtype=np.int64)
-    )
-
-    ind = Individual(
-        real=real_vars,
-        count=count_vars,
-        binary=binary_vars,
-        categorical=cat_vars,
-        fuzzy=fuzzy_vars,
-        circular=circular_vars,
-        sigma_real=np.full(cfg.n_real, cfg.init_sigma_real, dtype=np.float64),
-        lambda_count=np.full(cfg.n_count, cfg.init_lambda_count, dtype=np.float64),
-        sigma_fuzzy=np.full(cfg.n_fuzzy * 3, cfg.init_sigma_fuzzy, dtype=np.float64),
-        logit_binary=np.full(cfg.n_binary, cfg.init_logit_binary, dtype=np.float64),
-        logit_cat=np.full(cfg.total_cat_logits, cfg.init_logit_cat, dtype=np.float64),
-        logit_circular=np.full(cfg.n_circular, cfg.init_logit_circular, dtype=np.float64),
-    )
-    return ind
-
-
-def _random_fuzzy_points(rng: np.random.Generator, n_fuzzy: int) -> NDArray[np.float64]:
-    """Generate random fuzzy triples (a, b, c) satisfying a <= b <= c."""
-    if n_fuzzy == 0:
-        return np.zeros(0, dtype=np.float64)
-    points = np.empty(n_fuzzy * 3, dtype=np.float64)
-    for i in range(n_fuzzy):
-        abc = np.sort(rng.random(3))
-        points[i * 3: i * 3 + 3] = abc
-    return points
+    return Individual(blocks=blocks)
 
 
 # -----------------------------------------------------------------------------
@@ -209,22 +185,11 @@ def clone_individual(parent: Individual) -> Individual:
     """
     Create a fully independent deep copy of a parent individual.
 
-    All NumPy arrays are copied so that mutations on the child
+    All NumPy arrays are copied inside each block so that mutations on the child
     do not affect the parent's state.
     """
     return Individual(
-        real=parent.real.copy(),
-        count=parent.count.copy(),
-        binary=parent.binary.copy(),
-        categorical=parent.categorical.copy(),
-        fuzzy=parent.fuzzy.copy(),
-        circular=parent.circular.copy(),
-        sigma_real=parent.sigma_real.copy(),
-        lambda_count=parent.lambda_count.copy(),
-        sigma_fuzzy=parent.sigma_fuzzy.copy(),
-        logit_binary=parent.logit_binary.copy(),
-        logit_cat=parent.logit_cat.copy(),
-        logit_circular=parent.logit_circular.copy(),
+        blocks={name: block.copy() for name, block in parent.blocks.items()},
         fitness=parent.fitness,
     )
 
@@ -232,25 +197,6 @@ def clone_individual(parent: Individual) -> Individual:
 # -----------------------------------------------------------------------------
 # 4. Child Recombination & Mutation Pipeline
 # -----------------------------------------------------------------------------
-
-def _global_intermediate(
-    base_params: NDArray[np.float64],
-    parents: list[Individual],
-    attr_name: str,
-    rng: np.random.Generator,
-) -> NDArray[np.float64]:
-    """Global intermediate recombination for a strategy parameter vector."""
-    n = base_params.shape[0]
-    if n == 0:
-        return base_params.copy()
-    result = base_params.copy()
-    mu = len(parents)
-    for j in range(n):
-        second_idx = rng.integers(0, mu)
-        second_val = getattr(parents[second_idx], attr_name)[j]
-        result[j] = (result[j] + second_val) / 2.0
-    return result
-
 
 def recombine_individual(
     parent_a: Individual,
@@ -262,52 +208,35 @@ def recombine_individual(
     Create a child individual via recombination.
 
     - Objective variables: Dual discrete recombination (two distinct parents
-      chosen at random for each offspring; 50% probability per gene).
+      chosen at random for each offspring, 50% probability per gene).
     - Strategy parameters: Global intermediate recombination (for each gene,
       averages base parent value with a random second parent's value).
     """
-    cfg = config if config is not None else DEFAULT_CONFIG
     mu = len(parents)
-
-    child = clone_individual(parent_a)
     if mu <= 1:
-        return child
+        return clone_individual(parent_a)
 
     # Select a second distinct parent for discrete recombination
-    idx_b = rng.integers(0, mu)
+    idx_b = int(rng.integers(0, mu))
     while parents[idx_b] is parent_a and mu > 1:
-        idx_b = rng.integers(0, mu)
+        idx_b = int(rng.integers(0, mu))
     parent_b = parents[idx_b]
 
-    # 1. Dual discrete recombination for decision variables
-    if cfg.n_real > 0 and len(child.real) > 0:
-        mask = rng.random(cfg.n_real) < 0.5
-        child.real = np.where(mask, parent_a.real, parent_b.real)
-    if cfg.n_count > 0 and len(child.count) > 0:
-        mask = rng.random(cfg.n_count) < 0.5
-        child.count = np.where(mask, parent_a.count, parent_b.count)
-    if cfg.n_binary > 0 and len(child.binary) > 0:
-        mask = rng.random(cfg.n_binary) < 0.5
-        child.binary = np.where(mask, parent_a.binary, parent_b.binary)
-    if cfg.n_categorical > 0 and len(child.categorical) > 0:
-        mask = rng.random(cfg.n_categorical) < 0.5
-        child.categorical = np.where(mask, parent_a.categorical, parent_b.categorical)
-    if cfg.n_fuzzy > 0 and len(child.fuzzy) > 0:
-        mask = rng.random(cfg.n_fuzzy * 3) < 0.5
-        child.fuzzy = np.where(mask, parent_a.fuzzy, parent_b.fuzzy)
-    if cfg.n_circular > 0 and len(child.circular) > 0:
-        mask = rng.random(cfg.n_circular) < 0.5
-        child.circular = np.where(mask, parent_a.circular, parent_b.circular)
+    child_blocks: dict[str, VariableBlock] = {
+        name: block.copy() for name, block in parent_a.blocks.items()
+    }
 
-    # 2. Global intermediate recombination for strategy parameters
-    child.sigma_real = _global_intermediate(parent_a.sigma_real, parents, "sigma_real", rng)
-    child.lambda_count = _global_intermediate(parent_a.lambda_count, parents, "lambda_count", rng)
-    child.sigma_fuzzy = _global_intermediate(parent_a.sigma_fuzzy, parents, "sigma_fuzzy", rng)
-    child.logit_binary = _global_intermediate(parent_a.logit_binary, parents, "logit_binary", rng)
-    child.logit_cat = _global_intermediate(parent_a.logit_cat, parents, "logit_cat", rng)
-    child.logit_circular = _global_intermediate(parent_a.logit_circular, parents, "logit_circular", rng)
+    # 1. Dual discrete recombination for decision variables across all blocks
+    for name, block_a in parent_a.blocks.items():
+        if name in parent_b.blocks:
+            child_blocks[name].values = block_a.recombine_values(parent_b.blocks[name], rng)
 
-    return child
+    # 2. Global intermediate recombination for strategy parameters across all blocks
+    for name, block_a in parent_a.blocks.items():
+        donor_blocks = [p.blocks[name] for p in parents if name in p.blocks]
+        child_blocks[name].strategy = block_a.recombine_strategy(donor_blocks, rng)
+
+    return Individual(blocks=child_blocks)
 
 
 def mutate_individual(
@@ -319,29 +248,19 @@ def mutate_individual(
     Apply self-adaptive mutation.
 
     Steps:
-    1. Adapt strategy parameters (log-normal for scales, logit-normal for probs).
-    2. Mutate decision variables using adapted strategies.
+    1. Adapt strategy parameters across all blocks.
+    2. Mutate decision variables using the adapted strategies.
     """
     cfg = config if config is not None else DEFAULT_CONFIG
     tau_prime, tau = cfg.tau_prime_and_tau
 
-    # Adapt Strategies
-    ind.sigma_real = kernels.adapt_scales(ind.sigma_real, rng, tau_prime, tau, cfg.sigma_floor)
-    ind.lambda_count = kernels.adapt_scales(ind.lambda_count, rng, tau_prime, tau, cfg.sigma_floor)
-    ind.sigma_fuzzy = kernels.adapt_scales(ind.sigma_fuzzy, rng, tau_prime, tau, cfg.sigma_floor)
-    # Clamp fuzzy sigmas to ceiling: prevents drift in bounded [0,1] domain
-    np.minimum(ind.sigma_fuzzy, cfg.sigma_ceiling_fuzzy, out=ind.sigma_fuzzy)
-    ind.logit_binary = kernels.adapt_logits(ind.logit_binary, rng, tau)
-    ind.logit_cat = kernels.adapt_logits(ind.logit_cat, rng, tau)
-    ind.logit_circular = kernels.adapt_logits(ind.logit_circular, rng, tau)
+    # Adapt strategy parameters first
+    for block in ind.blocks.values():
+        block.adapt_strategy(rng, tau_prime, tau)
 
-    # Mutate Decision Variables
-    ind.real = kernels.mutate_real(ind.real, ind.sigma_real, rng, cfg.real_bounds)
-    ind.count = kernels.mutate_count(ind.count, ind.lambda_count, rng, cfg.count_bounds)
-    ind.binary = kernels.mutate_binary(ind.binary, ind.logit_binary, rng)
-    ind.categorical = kernels.mutate_categorical(ind.categorical, ind.logit_cat, rng, cfg.categorical_k)
-    ind.fuzzy = kernels.mutate_fuzzy(ind.fuzzy, ind.sigma_fuzzy, rng, cfg.n_fuzzy, cfg.fuzzy_epsilon)
-    ind.circular = kernels.mutate_circular(ind.circular, ind.logit_circular, rng, cfg.circular_k)
+    # Mutate decision variables using updated strategies
+    for block in ind.blocks.values():
+        block.mutate(rng)
 
 
 # -----------------------------------------------------------------------------
@@ -354,9 +273,7 @@ def select_survivors(
     mode: str = "comma",
     mu: int = 15,
 ) -> list[Individual]:
-    """
-    Deterministic rank-based selection of the top MU individuals.
-    """
+    """Deterministic rank-based selection of the top MU individuals."""
     if mode == "comma":
         pool = child
     elif mode == "plus":
@@ -377,7 +294,7 @@ class HeterogeneousES:
     Stateful Evolution Strategy optimizer for heterogeneous mixed-variable optimization.
     """
 
-    def __init__(self, config: ESConfig | None = None, seed: int | None = None):
+    def __init__(self, config: ESConfig | None = None, seed: int | None = None) -> None:
         self.config = config if config is not None else DEFAULT_CONFIG
         actual_seed = seed if seed is not None else self.config.seed
         self.rng = np.random.default_rng(actual_seed)
@@ -387,22 +304,31 @@ class HeterogeneousES:
         self.evaluations: int = 0
         self.generation: int = 0
 
-    def init_population(self, fn: Callable) -> None:
+    def _get_eval_input(self, ind: Individual) -> NDArray[np.float64]:
+        """Format individual representation for objective evaluation function."""
+        if self.config.n_real > 0 and self.config.n_total == self.config.n_real and "real" in ind.blocks:
+            return ind.blocks["real"].values
+        return ind.genome
+
+    def init_population(self, fn: Callable[[NDArray[np.float64]], float]) -> None:
         """Initialize population and evaluate fitness of initial parents."""
-        self.parents = [create_random_individual(self.rng, self.config) for _ in range(self.config.mu)]
+        self.parents = [
+            create_random_individual(self.rng, self.config)
+            for _ in range(self.config.mu)
+        ]
         self.evaluations = 0
         self.generation = 0
         self.best_so_far = float("inf")
 
         for ind in self.parents:
-            eval_input = ind.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else ind.genome
+            eval_input = self._get_eval_input(ind)
             ind.fitness = fn(eval_input)
             self.evaluations += 1
             if ind.fitness < self.best_so_far:
                 self.best_so_far = ind.fitness
                 self.best_individual = clone_individual(ind)
 
-    def step(self, fn: Callable) -> float:
+    def step(self, fn: Callable[[NDArray[np.float64]], float]) -> float:
         """Execute one generational step."""
         if not self.parents:
             self.init_population(fn)
@@ -411,10 +337,15 @@ class HeterogeneousES:
         childs: list[Individual] = []
 
         for _ in range(self.config.lam):
-            parent_idx = self.rng.integers(0, self.config.mu)
-            child = recombine_individual(self.parents[parent_idx], self.parents, self.rng, self.config)
+            parent_idx = int(self.rng.integers(0, self.config.mu))
+            child = recombine_individual(
+                self.parents[parent_idx],
+                self.parents,
+                self.rng,
+                self.config,
+            )
             mutate_individual(child, self.rng, self.config)
-            eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
+            eval_input = self._get_eval_input(child)
             child.fitness = fn(eval_input)
             self.evaluations += 1
 
@@ -424,15 +355,24 @@ class HeterogeneousES:
 
             childs.append(child)
 
-        self.parents = select_survivors(self.parents, childs, mode=self.config.selection_mode, mu=self.config.mu)
+        self.parents = select_survivors(
+            self.parents,
+            childs,
+            mode=self.config.selection_mode,
+            mu=self.config.mu,
+        )
         return self.best_so_far
 
-    def optimize(self, fn: Callable, max_evals: int) -> NDArray[np.float64]:
+    def optimize(
+        self,
+        fn: Callable[[NDArray[np.float64]], float],
+        max_evals: int,
+    ) -> NDArray[np.float64]:
         """Full optimization loop returning 1-D trace of best fitness per evaluation."""
         trace: list[float] = []
         self.init_population(fn)
 
-        for ind in self.parents:
+        for _ in self.parents:
             trace.append(self.best_so_far)
             if len(trace) >= max_evals:
                 return np.array(trace[:max_evals], dtype=np.float64)
@@ -442,10 +382,15 @@ class HeterogeneousES:
             childs: list[Individual] = []
 
             for _ in range(self.config.lam):
-                parent_idx = self.rng.integers(0, self.config.mu)
-                child = recombine_individual(self.parents[parent_idx], self.parents, self.rng, self.config)
+                parent_idx = int(self.rng.integers(0, self.config.mu))
+                child = recombine_individual(
+                    self.parents[parent_idx],
+                    self.parents,
+                    self.rng,
+                    self.config,
+                )
                 mutate_individual(child, self.rng, self.config)
-                eval_input = child.real if (self.config.n_real > 0 and self.config.n_total == self.config.n_real) else child.genome
+                eval_input = self._get_eval_input(child)
                 child.fitness = fn(eval_input)
                 self.evaluations += 1
 
@@ -459,7 +404,11 @@ class HeterogeneousES:
                     break
 
             if len(childs) > 0:
-                self.parents = select_survivors(self.parents, childs, mode=self.config.selection_mode, mu=self.config.mu)
+                self.parents = select_survivors(
+                    self.parents,
+                    childs,
+                    mode=self.config.selection_mode,
+                    mu=self.config.mu,
+                )
 
         return np.array(trace[:max_evals], dtype=np.float64)
-

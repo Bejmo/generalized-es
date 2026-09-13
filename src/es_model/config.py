@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
+from typing import Any
 import numpy as np
 from numpy.typing import NDArray
+
+from .blocks.base import resolve_bounds
 
 
 @dataclass
@@ -48,9 +51,9 @@ class ESConfig:
     lower_bound_count: int = 0
     upper_bound_count: int = 20
 
-    # Custom real bounds override (shape: (n_real, 2)). If set, overrides lower/upper_bound_real.
-    custom_real_bounds: NDArray[np.float64] | None = None
-    custom_count_bounds: NDArray[np.int64] | None = None
+    # Custom real/count bounds override: supports scalar pair, grouped list, or (N, 2) matrix.
+    custom_real_bounds: Any = None
+    custom_count_bounds: Any = None
 
     # -----------------------------------------------------------------------------
     # 4. Self-Adaptation Constants
@@ -103,25 +106,27 @@ class ESConfig:
     def real_bounds(self) -> NDArray[np.float64]:
         """Real variable bounds matrix of shape (n_real, 2)."""
         if self.custom_real_bounds is not None:
-            return self.custom_real_bounds
+            return resolve_bounds(self.custom_real_bounds, self.n_real, dtype=np.float64)
         if self.n_real == 0:
             return np.empty((0, 2), dtype=np.float64)
-        return np.column_stack([
-            np.full(self.n_real, self.lower_bound_real, dtype=np.float64),
-            np.full(self.n_real, self.upper_bound_real, dtype=np.float64),
-        ])
+        return resolve_bounds(
+            (self.lower_bound_real, self.upper_bound_real),
+            self.n_real,
+            dtype=np.float64,
+        )
 
     @property
     def count_bounds(self) -> NDArray[np.int64]:
         """Count variable bounds matrix of shape (n_count, 2)."""
         if self.custom_count_bounds is not None:
-            return self.custom_count_bounds
+            return resolve_bounds(self.custom_count_bounds, self.n_count, dtype=np.int64)
         if self.n_count == 0:
             return np.empty((0, 2), dtype=np.int64)
-        return np.column_stack([
-            np.full(self.n_count, self.lower_bound_count, dtype=np.int64),
-            np.full(self.n_count, self.upper_bound_count, dtype=np.int64),
-        ])
+        return resolve_bounds(
+            (self.lower_bound_count, self.upper_bound_count),
+            self.n_count,
+            dtype=np.int64,
+        )
 
     @property
     def init_sigma_real(self) -> float:
