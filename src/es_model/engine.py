@@ -56,6 +56,55 @@ class Individual:
             return np.zeros(0, dtype=np.float64)
         return np.concatenate(parts)
 
+    # Convenience properties for backward compatibility
+    @property
+    def real(self) -> NDArray[np.float64]:
+        return self.blocks["real"].values.astype(np.float64) if "real" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def count(self) -> NDArray[np.int64]:
+        return self.blocks["count"].values.astype(np.int64) if "count" in self.blocks else np.zeros(0, dtype=np.int64)
+
+    @property
+    def binary(self) -> NDArray[np.uint8]:
+        return self.blocks["binary"].values.astype(np.uint8) if "binary" in self.blocks else np.zeros(0, dtype=np.uint8)
+
+    @property
+    def categorical(self) -> NDArray[np.int64]:
+        return self.blocks["categorical"].values.astype(np.int64) if "categorical" in self.blocks else np.zeros(0, dtype=np.int64)
+
+    @property
+    def fuzzy(self) -> NDArray[np.float64]:
+        return self.blocks["fuzzy"].values.astype(np.float64) if "fuzzy" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def circular(self) -> NDArray[np.int64]:
+        return self.blocks["circular"].values.astype(np.int64) if "circular" in self.blocks else np.zeros(0, dtype=np.int64)
+
+    @property
+    def sigma_real(self) -> NDArray[np.float64]:
+        return self.blocks["real"].strategy if "real" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def lambda_count(self) -> NDArray[np.float64]:
+        return self.blocks["count"].strategy if "count" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def logit_binary(self) -> NDArray[np.float64]:
+        return self.blocks["binary"].strategy if "binary" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def logit_cat(self) -> NDArray[np.float64]:
+        return self.blocks["categorical"].strategy if "categorical" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def sigma_fuzzy(self) -> NDArray[np.float64]:
+        return self.blocks["fuzzy"].strategy if "fuzzy" in self.blocks else np.zeros(0, dtype=np.float64)
+
+    @property
+    def logit_circular(self) -> NDArray[np.float64]:
+        return self.blocks["circular"].strategy if "circular" in self.blocks else np.zeros(0, dtype=np.float64)
+
 
 @dataclass
 class UnpackedGenome:
