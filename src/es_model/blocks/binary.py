@@ -28,7 +28,7 @@ class BinaryBlock(VariableBlock):
         values: NDArray[np.uint8],
         strategy: NDArray[np.float64],
     ) -> None:
-        super().__init__(name="binary", values=values, strategy=strategy)
+        super().__init__(name="binary", values=values, strategy=strategy, strategy_recomb="arithmetic")
 
     @classmethod
     def random(cls, config: ESConfig, rng: np.random.Generator) -> BinaryBlock:

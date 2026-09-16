@@ -30,7 +30,7 @@ class CategoricalBlock(VariableBlock):
         strategy: NDArray[np.float64],
         categorical_k: NDArray[np.int64],
     ) -> None:
-        super().__init__(name="categorical", values=values, strategy=strategy)
+        super().__init__(name="categorical", values=values, strategy=strategy, strategy_recomb="arithmetic")
         self.categorical_k: NDArray[np.int64] = np.asarray(categorical_k, dtype=np.int64)
 
     @classmethod

@@ -91,10 +91,12 @@ class VariableBlock(ABC):
         name: str,
         values: NDArray[Any],
         strategy: NDArray[np.float64],
+        strategy_recomb: str = "geometric",
     ) -> None:
         self.name = name
         self.values = values
         self.strategy = strategy
+        self.strategy_recomb = strategy_recomb
 
     @property
     def dim(self) -> int:
@@ -155,8 +157,9 @@ class VariableBlock(ABC):
         """
         Global intermediate recombination for strategy parameters.
 
-        For each parameter index j, picks a random donor block from others
-        and averages donor's parameter with self.strategy[j].
+        For each parameter index j, picks a random donor block from others.
+        Applies geometric mean for scale parameters (preventing inflationary drift),
+        and arithmetic mean for logit parameters (log-odds space).
         """
         n = self.strategy_dim
         if n == 0:
@@ -166,7 +169,10 @@ class VariableBlock(ABC):
         for j in range(n):
             second_idx = int(rng.integers(0, num_parents))
             donor_val = others[second_idx].strategy[j]
-            result[j] = (result[j] + donor_val) / 2.0
+            if self.strategy_recomb == "geometric":
+                result[j] = float(np.sqrt(np.maximum(result[j] * donor_val, 1e-12)))
+            else:
+                result[j] = (result[j] + donor_val) / 2.0
         return result
 
     def flatten(self) -> NDArray[np.float64]:
