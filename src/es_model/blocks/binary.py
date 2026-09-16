@@ -27,8 +27,10 @@ class BinaryBlock(VariableBlock):
         self,
         values: NDArray[np.uint8],
         strategy: NDArray[np.float64],
+        max_logit_binary: float = 0.0,
     ) -> None:
         super().__init__(name="binary", values=values, strategy=strategy, strategy_recomb="arithmetic")
+        self.max_logit_binary: float = max_logit_binary
 
     @classmethod
     def random(cls, config: ESConfig, rng: np.random.Generator) -> BinaryBlock:
@@ -39,9 +41,11 @@ class BinaryBlock(VariableBlock):
             else np.zeros(0, dtype=np.uint8)
         )
         strategy = np.full(config.n_binary, config.init_logit_binary, dtype=np.float64)
+        max_logit = getattr(config, "max_logit_binary", 0.0)
         return cls(
             values=values,
             strategy=strategy,
+            max_logit_binary=max_logit,
         )
 
     def copy(self) -> BinaryBlock:
@@ -49,6 +53,7 @@ class BinaryBlock(VariableBlock):
         return BinaryBlock(
             values=self.values.copy(),
             strategy=self.strategy.copy(),
+            max_logit_binary=self.max_logit_binary,
         )
 
     def adapt_strategy(
@@ -57,11 +62,12 @@ class BinaryBlock(VariableBlock):
         tau_prime: float,
         tau: float,
     ) -> None:
-        """Adapt flip logits using additive Gaussian noise."""
+        """Adapt flip logits using additive Gaussian noise with max_logit ceiling."""
         self.strategy = kernels.adapt_logits(
             self.strategy,
             rng,
             tau,
+            max_logit=self.max_logit_binary,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:

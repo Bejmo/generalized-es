@@ -62,12 +62,13 @@ class CategoricalBlock(VariableBlock):
         tau_prime: float,
         tau: float,
     ) -> None:
-        """Adapt categorical logits using additive Gaussian noise."""
-        self.strategy = kernels.adapt_logits(
+        """Adapt categorical logits using additive Gaussian noise and zero-mean centering."""
+        adapted = kernels.adapt_logits(
             self.strategy,
             rng,
             tau,
         )
+        self.strategy = kernels.center_categorical_logits(adapted, self.categorical_k)
 
     def mutate(self, rng: np.random.Generator) -> None:
         """Apply softmax sampling per categorical variable slice."""

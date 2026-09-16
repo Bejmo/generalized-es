@@ -60,13 +60,15 @@ class ESConfig:
     # -----------------------------------------------------------------------------
     sigma_floor: float = 1e-6      # Stability floor for strategy parameters
     sigma_ceiling_fuzzy: float = 0.5  # Maximum sigma for fuzzy [0,1] domain (prevents drift)
+    sigma_ceiling_factor: float = 0.3 # Maximum mutation step ratio relative to domain range
+    max_logit_binary: float = 0.0  # Maximum logit for binary flips (p_flip <= 0.5)
 
     # -----------------------------------------------------------------------------
     # 5. Initial Strategy Parameter Defaults
     # -----------------------------------------------------------------------------
     init_lambda_count: float = 1.0  # Initial Poisson rate for counts
     init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
-    init_logit_binary: float = 0.0  # Initial logit for binary flip probability (p=0.5)
+    init_logit_binary: float = -2.0 # Initial logit for binary flip probability (p ~ 0.119)
     init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
     init_logit_circular: float = 0.0 # Initial forward logit for circular variables (legacy)
     init_lambda_circular: float = 1.0 # Initial Poisson rate for modular Skellam circulars
