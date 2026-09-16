@@ -68,7 +68,8 @@ class ESConfig:
     init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
     init_logit_binary: float = 0.0  # Initial logit for binary flip probability (p=0.5)
     init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
-    init_logit_circular: float = 0.0 # Initial forward logit for circular variables (p_f=0.5)
+    init_logit_circular: float = 0.0 # Initial forward logit for circular variables (legacy)
+    init_lambda_circular: float = 1.0 # Initial Poisson rate for modular Skellam circulars
 
     # -----------------------------------------------------------------------------
     # 6. Fuzzy Structural Constants

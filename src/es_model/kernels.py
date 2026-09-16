@@ -310,29 +310,28 @@ def mutate_categorical(
 
 
 # -----------------------------------------------------------------------------
-# 6. Circular Mutation (Forward/Backward Step)
+# 6. Circular Mutation (Modular Skellam Step)
 # -----------------------------------------------------------------------------
 
 def mutate_circular(
     values: NDArray[np.int64],
-    logits: NDArray[np.float64],
+    lambdas: NDArray[np.float64],
     rng: np.random.Generator,
     circular_k: NDArray[np.int64],
 ) -> NDArray[np.int64]:
     """
-    Circular mutation for variables with a closed order (e.g., days of the week).
+    Circular mutation using a modular (wrapped) Skellam distribution.
 
-    Each circular variable stores a forward-probability logit. The forward
-    probability is p_f = sigmoid(logit), and the backward probability is
-    p_b = 1 - p_f. The variable steps forward (+1 mod k) with probability p_f,
-    or backward (-1 mod k) with probability p_b.
+    Delta = Poisson(lambda) - Poisson(lambda)  (difference of two independent Poissons).
+    The step wraps around modular cardinality: (values + delta) % circular_k.
+    When lambda -> 0, Delta = 0 with probability -> 1 (natural step zero / inertia).
 
     Parameters
     ----------
     values : ndarray of int64
         Current circular indices.
-    logits : ndarray of float64
-        Forward-probability logits (one per variable).
+    lambdas : ndarray of float64
+        Adapted Poisson rate parameters for circular diffusion.
     rng : numpy Generator
     circular_k : ndarray of int64
         Cardinality (number of discrete positions) per circular variable.
@@ -340,17 +339,15 @@ def mutate_circular(
     Returns
     -------
     ndarray of int64
-        Mutated circular indices.
+        Mutated circular indices wrapped modulo k.
     """
     if values.shape[0] == 0:
         return values.copy()
 
-    p_forward: NDArray[np.float64] = sigmoid(logits)
-    rolls: NDArray[np.float64] = rng.random(values.shape[0])
-
-    # Forward step where roll < p_f, backward step otherwise.
-    steps = np.where(rolls < p_forward, 1, -1).astype(np.int64)
-    mutated = (values + steps) % circular_k
+    pos: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
+    neg: NDArray[np.int64] = rng.poisson(lambdas).astype(np.int64)
+    delta: NDArray[np.int64] = pos - neg
+    mutated = (values + delta) % circular_k
 
     return mutated
 
