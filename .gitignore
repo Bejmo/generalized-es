@@ -10,3 +10,7 @@ __pycache__/
 
 # Local runtime logs
 report.log
+
+# Save data (e.g. experiments/data/*, experiment_X_*.png, etc)
+experiments/data/
+experiments/*_*.png
