@@ -9,7 +9,7 @@ from .blocks.base import resolve_bounds
 @dataclass
 class ESConfig:
     """
-    Configuration dataclass for the Heterogeneous Evolution Strategy.
+    Configuration dataclass for the Generalized Evolution Strategy.
     Encapsulates all hyperparameters, genome dimensions, variable bounds,
     and self-adaptation defaults.
     """

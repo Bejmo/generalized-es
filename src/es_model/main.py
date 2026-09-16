@@ -2,7 +2,7 @@
 Main project entrypoint.
 
 This module exposes:
-- The heterogeneous ES optimization loop.
+- The generalized ES optimization loop.
 - A simple terminal interface to run model, benchmarks, smoke, or all.
 """
 
@@ -18,7 +18,7 @@ from src.benchmarks.functions import BENCHMARKS
 from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 from .config import DEFAULT_CONFIG, ESConfig
-from .engine import Individual, HeterogeneousES
+from .engine import Individual, HeterogeneousES, GeneralizedES
 
 RUNNERS = {
     "Prototype 1": custom_es.run,

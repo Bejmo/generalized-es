@@ -1,6 +1,6 @@
-# Roadmap y Plan de Trabajo - TFG Heterogeneous Evolution Strategies
+# Roadmap y Plan de Trabajo - TFG Generalized Evolution Strategies
 
-Este documento detalla la hoja de ruta y los siguientes pasos estratégicos para la extensión, validación y redacción final de la Memoria del **Trabajo de Fin de Grado (TFG)**: *Heterogeneous Evolution Strategies for Mixed-Variable Optimization*.
+Este documento detalla la hoja de ruta y los siguientes pasos estratégicos para la extensión, validación y redacción final de la Memoria del **Trabajo de Fin de Grado (TFG)**: *Generalized Evolution Strategies for Mixed-Variable Optimization*.
 
 ---
 

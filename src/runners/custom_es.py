@@ -1,5 +1,5 @@
 """
-Runner wrapper for the custom heterogeneous (mu, lambda)-ES.
+Runner wrapper for the custom Generalized (mu, lambda)-ES.
 """
 
 from copy import copy
@@ -11,7 +11,7 @@ from src.es_model.engine import HeterogeneousES
 
 def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, config: ESConfig | None = None, **kwargs) -> np.ndarray:
     """
-    Benchmark runner interface for the Heterogeneous ES.
+    Benchmark runner interface for the Generalized ES.
     Delegates optimization directly to the unified HeterogeneousES engine.
     """
     if config is None:

@@ -1,8 +1,8 @@
-# Heterogeneous Evolution Strategies for Mixed-Variable Optimization
+# Generalized Evolution Strategies for Mixed-Variable Optimization
 
 An experimental TFG from a student from the FIB UPC, on the Computer Science especialization.
 
-This framework implements a **Heterogeneous Evolution Strategies (ES)** supporting mixed-variable optimization under $(\mu, \lambda)$ and $(\mu + \lambda)$ selection schemes with log-normal/logit-normal self-adaptation. Includes benchmark suites and comparison runners against baseline optimizers (*Isotropic ES*, *sep-CMA-ES*, and *Standard CMA-ES*).
+This framework implements **Generalized Evolution Strategies (ES)** supporting mixed-variable optimization under $(\mu, \lambda)$ and $(\mu + \lambda)$ selection schemes with log-normal/logit-normal self-adaptation. Includes benchmark suites and comparison runners against baseline optimizers (*Isotropic ES*, *sep-CMA-ES*, and *Standard CMA-ES*).
 
 ---
 
@@ -156,4 +156,4 @@ python -m src.es_model.main smoke --dim 5 --max-evals 200 --seeds 2
 
 ## License
 
-Academic project — Heterogeneous Evolution Strategies for Mixed-Variable Optimization.
+Academic project: Generalized Evolution Strategies for Mixed-Variable Optimization.

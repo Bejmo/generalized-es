@@ -1,9 +1,9 @@
 """
-engine.py — Evolutionary algorithm engine, Individual representation, and selection.
+engine.py: Evolutionary algorithm engine, Individual representation, and selection.
 
 Defines the Individual class (encapsulating VariableBlock instances), child cloning,
 recombination, mutation pipelines, deterministic rank-based survivor selection,
-and the HeterogeneousES optimizer class.
+and the GeneralizedES / HeterogeneousES optimizer class.
 """
 
 from __future__ import annotations
@@ -335,12 +335,12 @@ def select_survivors(
 
 
 # -----------------------------------------------------------------------------
-# 6. HeterogeneousES Optimizer Class
+# 6. GeneralizedES / HeterogeneousES Optimizer Class
 # -----------------------------------------------------------------------------
 
 class HeterogeneousES:
     """
-    Stateful Evolution Strategy optimizer for heterogeneous mixed-variable optimization.
+    Stateful Generalized Evolution Strategy optimizer for mixed-variable optimization.
     """
 
     def __init__(self, config: ESConfig | None = None, seed: int | None = None) -> None:
@@ -461,3 +461,4 @@ class HeterogeneousES:
                 )
 
         return np.array(trace[:max_evals], dtype=np.float64)
+GeneralizedES = HeterogeneousES
