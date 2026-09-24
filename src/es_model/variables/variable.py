@@ -1,5 +1,5 @@
 """
-base.py — Abstract base class for heterogeneous variable blocks and bounds utilities.
+variable.py: Abstract base class for decision variables and bounds utilities.
 """
 
 from __future__ import annotations
@@ -8,6 +8,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Sequence
 import numpy as np
 from numpy.typing import NDArray
+
+from .. import kernels
 
 
 def resolve_bounds(
@@ -80,7 +82,7 @@ def resolve_bounds(
     return arr
 
 
-class VariableBlock(ABC):
+class Variable(ABC):
     """
     Abstract base class representing a vector of variables of the same mathematical type
     co-evolving with their corresponding strategy parameters.
@@ -92,11 +94,19 @@ class VariableBlock(ABC):
         values: NDArray[Any],
         strategy: NDArray[np.float64],
         strategy_recomb: str = "geometric",
+        adaptation_type: str = "lognormal",
+        sigma_floor: float = 1e-6,
+        strategy_ceiling: float | NDArray[np.float64] | None = None,
+        max_logit: float | None = None,
     ) -> None:
         self.name = name
         self.values = values
         self.strategy = strategy
         self.strategy_recomb = strategy_recomb
+        self.adaptation_type = adaptation_type
+        self.sigma_floor = sigma_floor
+        self.strategy_ceiling = strategy_ceiling
+        self.max_logit = max_logit
 
     @property
     def dim(self) -> int:
@@ -110,16 +120,15 @@ class VariableBlock(ABC):
 
     @classmethod
     @abstractmethod
-    def random(cls, config: Any, rng: np.random.Generator) -> VariableBlock:
-        """Instantiate a randomly initialized block using configuration parameters."""
+    def random(cls, config: Any, rng: np.random.Generator) -> Variable:
+        """Instantiate a randomly initialized variable block using configuration parameters."""
         ...
 
     @abstractmethod
-    def copy(self) -> VariableBlock:
-        """Create a deep copy of this block with independent NumPy arrays."""
+    def copy(self) -> Variable:
+        """Create a deep copy of this variable block with independent NumPy arrays."""
         ...
 
-    @abstractmethod
     def adapt_strategy(
         self,
         rng: np.random.Generator,
@@ -127,7 +136,35 @@ class VariableBlock(ABC):
         tau: float,
     ) -> None:
         """Adapt strategy parameters via self-adaptation rules."""
-        ...
+        if self.adaptation_type == "lognormal":
+            self.strategy = kernels.apply_lognormal_selfadaptation(
+                self.strategy,
+                rng,
+                tau_prime,
+                tau,
+                self.sigma_floor,
+                self.strategy_ceiling,
+            )
+        elif self.adaptation_type == "logit":
+            self.strategy = kernels.adapt_logits(
+                self.strategy,
+                rng,
+                tau,
+                max_logit=self.max_logit,
+            )
+        else:
+            raise ValueError(f"Unknown adaptation_type: {self.adaptation_type}")
+
+        self._post_adapt_strategy(rng, tau_prime, tau)
+
+    def _post_adapt_strategy(
+        self,
+        rng: np.random.Generator,
+        tau_prime: float,
+        tau: float,
+    ) -> None:
+        """Optional hook for post-adaptation adjustments (e.g. centering categorical logits)."""
+        pass
 
     @abstractmethod
     def mutate(self, rng: np.random.Generator) -> None:
@@ -136,7 +173,7 @@ class VariableBlock(ABC):
 
     def recombine_values(
         self,
-        other: VariableBlock,
+        other: Variable,
         rng: np.random.Generator,
     ) -> NDArray[Any]:
         """
@@ -151,7 +188,7 @@ class VariableBlock(ABC):
 
     def recombine_strategy(
         self,
-        others: Sequence[VariableBlock],
+        others: Sequence[Variable],
         rng: np.random.Generator,
     ) -> NDArray[np.float64]:
         """

@@ -8,10 +8,10 @@ Este documento detalla la hoja de ruta y los siguientes pasos estratégicos para
 
 El proyecto cuenta actualmente con una arquitectura técnica y experimental plenamente funcional:
 
-- **Motor Heterogéneo $(\mu, \lambda)$-ES** ([`engine.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/es_model/engine.py)): Soporte completo para 6 tipos de variables (Reales $\mathbb{R}$, Enteras/Count $\mathbb{Z}$, Binarias $\mathbb{B}$, Categóricas $\mathbb{C}$, Difusas/Fuzzy $\mathbb{F}$ y Circulares $\mathbb{O}$).
+- **Motor Generalized $(\mu, \lambda)$-ES** ([`generalized_es.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/es_model/generalized_es.py), [`individual.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/es_model/individual.py), [`variables/`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/es_model/variables)): Soporte completo para 6 tipos de variables (Reales $\mathbb{R}$, Enteras/Count $\mathbb{Z}$, Binarias $\mathbb{B}$, Categóricas $\mathbb{C}$, Difusas/Fuzzy $\mathbb{F}$ y Circulares $\mathbb{O}$).
 - **Kernels de Auto-Adaptación** ([`kernels.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/es_model/kernels.py)): Log-normal para pasajes de escala ($\sigma, \lambda_{\text{count}}$) y Logit-normal para variables probabilísticas.
 - **Algoritmos de Referencia** ([`src/runners/`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/runners)): Adapters para *Isotropic ES*, *sep-CMA-ES* y *Standard CMA-ES*.
-- **Suite de Benchmarks Mixtos Sintéticos** ([`heterogeneous_functions.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/benchmarks/heterogeneous_functions.py)): Funciones *Heterogeneous_Sphere*, *Heterogeneous_Rastrigin* y *Heterogeneous_Coupled*.
+- **Suite de Benchmarks Mixtos Sintéticos** ([`generalized_functions.py`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/src/benchmarks/generalized_functions.py)): Funciones *Generalized_Sphere*, *Generalized_Rastrigin* y *Generalized_Coupled*.
 - **Cuadernos de Experimentación** ([`experiments/`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/experiments)):
   - [`experiment_1.ipynb`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/experiments/experiment_1.ipynb): Comparativa de rendimiento frente a baselines.
   - [`experiment_2.ipynb`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/experiments/experiment_2.ipynb): Análisis de dinámicas internas y evolución de parámetros de estrategia ($\sigma$ y logits).

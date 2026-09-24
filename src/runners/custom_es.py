@@ -6,13 +6,13 @@ from copy import copy
 
 import numpy as np
 from src.es_model.config import ESConfig
-from src.es_model.engine import HeterogeneousES
+from src.es_model.generalized_es import GeneralizedES
 
 
 def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, config: ESConfig | None = None, **kwargs) -> np.ndarray:
     """
     Benchmark runner interface for the Generalized ES.
-    Delegates optimization directly to the unified HeterogeneousES engine.
+    Delegates optimization directly to the unified GeneralizedES engine.
     """
     if config is None:
         cfg = ESConfig(
@@ -31,6 +31,6 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, config: ESConfig | 
         cfg = copy(config)
         cfg.seed = seed
 
-    es = HeterogeneousES(config=cfg, seed=seed)
+    es = GeneralizedES(config=cfg, seed=seed)
     return es.optimize(fn, max_evals)
 

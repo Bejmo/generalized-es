@@ -18,7 +18,8 @@ from src.benchmarks.functions import BENCHMARKS
 from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 from .config import DEFAULT_CONFIG, ESConfig
-from .engine import Individual, HeterogeneousES, GeneralizedES
+from .individual import Individual
+from .generalized_es import GeneralizedES
 
 RUNNERS = {
     "Prototype 1": custom_es.run,
@@ -62,9 +63,9 @@ def default_eval_fn(x: np.ndarray) -> float:
 
 
 def run(config: ESConfig | None = None) -> None:
-    """Execute the ES generational loop using ESConfig and HeterogeneousES engine."""
+    """Execute the ES generational loop using ESConfig and GeneralizedES engine."""
     cfg = config if config is not None else DEFAULT_CONFIG
-    es = HeterogeneousES(cfg)
+    es = GeneralizedES(cfg)
     es.init_population(default_eval_fn)
 
     print(f"[ES] Mode={cfg.selection_mode} | mu={cfg.mu}, lambda={cfg.lam}")

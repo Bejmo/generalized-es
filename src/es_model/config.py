@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from .blocks.base import resolve_bounds
+from .variables.variable import resolve_bounds
 
 
 @dataclass
@@ -70,7 +70,6 @@ class ESConfig:
     init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
     init_logit_binary: float = -2.0 # Initial logit for binary flip probability (p ~ 0.119)
     init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
-    init_logit_circular: float = 0.0 # Initial forward logit for circular variables (legacy)
     init_lambda_circular: float = 1.0 # Initial Poisson rate for modular Skellam circulars
 
     # -----------------------------------------------------------------------------
@@ -146,5 +145,5 @@ class ESConfig:
         return tau_prime, tau
 
 
-# Default configuration instance for quick use / backward compatibility
+# Default configuration instance for quick use
 DEFAULT_CONFIG = ESConfig()

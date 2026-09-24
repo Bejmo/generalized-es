@@ -69,61 +69,99 @@ flowchart TD
 ```text
 TFG/
 ├── README.md                              # Main project documentation
-├── requirements.txt                       # Python dependencies (numpy, cma, matplotlib)
+├── pyproject.toml                         # Project metadata, dependencies & CLI scripts (PEP 621)
+├── uv.lock                                # Deterministic cross-platform lockfile
+├── .python-version                        # Pinned Python version (3.12)
 ├── src/                                   # Core source code
-│   ├── es_model/                          #   Heterogeneous ES Engine
+│   ├── es_model/                          #   Generalized ES Engine
 │   │   ├── config.py                      #     Problem settings, bounds, dimensions & learning rates
-│   │   ├── kernels.py                     #     Pure math functions for mutation & self-adaptation
-│   │   ├── engine.py                      #     Individual state, recombination, selection & HeterogeneousES class
+│   │   ├── kernels.py                     #     Pure math functions for activation & self-adaptation
+│   │   ├── variables/                     #     Modular variable representations & mutation operators
+│   │   ├── individual.py                  #     Individual candidate solution representation & genetic operators
+│   │   ├── generalized_es.py              #     GeneralizedES optimizer class & survivor selection
 │   │   └── main.py                        #     CLI entrypoint, interactive menu & execution workflows
 │   ├── benchmarks/                        #   Objective Benchmark Landscapes
 │   │   ├── functions.py                   #     Standard continuous landscapes (Sphere, Rastrigin, etc.)
-│   │   └── heterogeneous_functions.py    #     Synthetic mixed-variable landscapes testing all 6 types
+│   │   └── generalized_functions.py       #     Synthetic mixed-variable landscapes testing all 6 types
 │   └── runners/                           #   Experimental Benchmark Runners
-│       ├── custom_es.py                   #     Heterogeneous ES runner adapter
+│       ├── custom_es.py                   #     Generalized ES runner adapter
 │       ├── isotropic_es.py                #     Isotropic ES baseline (single scalar step-size)
 │       ├── sep_cma_es.py                  #     Separable CMA-ES baseline wrapper
 │       └── standard_cma_es.py             #     Standard CMA-ES upper-bound runner
+├── tests/                                 # Unit & integration test suites
+│   ├── test_variables.py                  #   Variable representations & mutations
+│   ├── test_individual_and_es.py          #   Candidate individual & ES optimization cycle
+│   └── test_benchmarks.py                 #   Continuous & generalized benchmark functions
 └── experiments/                           # Experimental Notebooks
-    └── experiment_1.ipynb                 # Equal-budget benchmark comparisons and plots
+    ├── experiment_1.ipynb                 #   Equal-budget benchmark comparisons and plots
+    └── experiment_2.ipynb                 #   Synthetic mixed-variable optimization across all 6 variable types
 ```
 
 ---
 
-## Quick Setup
+## Quick Setup with `uv`
 
-### Prerequisites
-- **Python 3.12+**
-- Operating System: Windows / Linux / macOS
+This project is managed with [uv](https://docs.astral.sh/uv/), a fast Python package and project manager. `uv` handles Python installation, reproducible lockfiles, virtual environments, and package execution.
+
+### 1. Install `uv` (if not already installed)
+
+- **Windows (PowerShell):**
+  ```powershell
+  irm https://astral.sh/uv/install.ps1 | iex
+  ```
+- **Linux / macOS:**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+### 2. Synchronize Environment
+
+From the project root directory, run:
 
 ```bash
-# 1. Create virtual environment
-python -m venv .venv
-
-# 2. Activate virtual environment
-# Windows (PowerShell)
-.venv\Scripts\activate
-# Linux / macOS
-source .venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
+uv sync
 ```
+
+This single command automatically:
+1. Downloads and pins **Python 3.12** (via `.python-version`).
+2. Creates the virtual environment in `.venv`.
+3. Resolves and installs all core dependencies (`numpy`, `matplotlib`, `cma`, `pymoo`).
+4. Installs development dependencies (`pytest`, `ipykernel`).
+5. Installs the project in editable mode with dedicated console shortcuts (`es-model`, `generalized-es`).
+
+### 3. Optional: Activating the Virtual Environment
+
+Commands can be run directly using `uv run ...` without manual activation. If you prefer activating the virtual environment in your terminal:
+
+- **Windows (PowerShell):**
+  ```powershell
+  .venv\Scripts\activate
+  ```
+- **Linux / macOS:**
+  ```bash
+  source .venv/bin/activate
+  ```
 
 ---
 
 ## Running the Project
 
-Run all commands from the **project root** directory.
+Run all commands from the **project root** directory. You can use either the direct CLI commands (`es-model` / `generalized-es`) or standard Python module execution (`python -m src.es_model.main`).
 
 ### Interactive Terminal Menu (Recommended)
 
 ```bash
-python -m src.es_model.main
+# Using CLI script shortcuts
+uv run es-model
+# or
+uv run generalized-es
+
+# Or using Python module execution
+uv run python -m src.es_model.main
 ```
 
 Available menu options:
-- `model`: Runs the Heterogeneous ES optimization loop on default configuration.
+- `model`: Runs the Generalized ES optimization loop on default configuration.
 - `benchmarks`: Runs benchmark evaluations across test functions against reference optimizers.
 - `smoke`: Fast sanity check run with minimal evaluation budget.
 - `all`: Sequentially executes `model` followed by `benchmarks`.
@@ -132,25 +170,59 @@ Available menu options:
 ### Direct CLI Commands
 
 ```bash
-# Model run with custom generations
-python -m src.es_model.main model --generations 200 --log-interval 20
+# Quick smoke validation
+uv run es-model smoke
+# or: uv run generalized-es smoke
+# or: uv run python -m src.es_model.main smoke
+
+# Model run with custom generations and logging interval
+uv run es-model model --generations 200 --log-interval 20
 
 # Benchmark suite on dim 20 with budget of 50,000 evaluations across 5 seeds
-python -m src.es_model.main benchmarks --dim 20 --max-evals 50000 --seeds 5
+uv run es-model benchmarks --dim 20 --max-evals 50000 --seeds 5
 
-# Quick smoke validation
-python -m src.es_model.main smoke --dim 5 --max-evals 200 --seeds 2
+# Custom smoke run with overridden parameters
+uv run es-model smoke --dim 5 --max-evals 200 --seeds 2
 ```
+
+---
+
+## Testing & Verification
+
+Run the test suite with `pytest` or Python's built-in `unittest`:
+
+```bash
+# Run tests with pytest
+uv run pytest
+
+# Run tests with unittest
+uv run python -m unittest discover -s tests
+```
+
+---
+
+## Working with Notebooks
+
+The development dependencies include `ipykernel` for Jupyter notebooks (`experiments/`):
+
+1. **In VS Code / Cursor / PyCharm:** Open any notebook in `experiments/` and select the `.venv` Python kernel (`Python 3.12 (.venv)`).
+2. **Via Jupyter Lab / Notebook CLI:**
+   ```bash
+   uv run jupyter lab
+   ```
 
 ---
 
 ## Dependencies
 
-| Package | Usage |
-|:---|:---|
-| `numpy` | Vectorized array calculations and numerical operations |
-| `cma` | Baseline CMA-ES and separable CMA-ES implementations |
-| `matplotlib` | Plotting convergence graphs in notebooks |
+| Package | Category | Usage |
+|:---|:---|:---|
+| `numpy` | Core | Vectorized array calculations and numerical operations |
+| `matplotlib` | Core | Plotting convergence graphs and strategy dynamics |
+| `cma` | Core | Baseline CMA-ES and separable CMA-ES implementations |
+| `pymoo` | Core | Multi-objective and evolutionary algorithm utilities |
+| `pytest` | Dev | Automated test runner for unit and integration suites |
+| `ipykernel` | Dev | Jupyter kernel support for experimental notebooks |
 
 ---
 
