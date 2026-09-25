@@ -81,7 +81,15 @@ def mutate_categorical(
         k_int = int(k)
         logit_slice = cat_logits[offset : offset + k_int]
         probs = kernels.softmax(logit_slice)
-        mutated[i] = rng.choice(k_int, p=probs)
+        r = float(rng.random())
+        acc = 0.0
+        choice = k_int - 1
+        for idx in range(k_int):
+            acc += probs[idx]
+            if r < acc:
+                choice = idx
+                break
+        mutated[i] = choice
         offset += k_int
 
     return mutated

@@ -155,7 +155,3 @@ class GeneralizedES:
             )
 
         return np.array(trace[:max_evals], dtype=np.float64)
-
-
-# Backward-compatibility alias
-HeterogeneousES = GeneralizedES

@@ -45,7 +45,7 @@ flowchart LR
 ---
 
 ### 🏭 Fase 2: Caso de Uso Práctico / Problema Real de Ingeniería
-*Objetivo: Demostrar la aplicabilidad del algoritmo heterogéneo en un entorno práctico del mundo real.*
+*Objetivo: Demostrar la aplicabilidad del algoritmo en un entorno práctico del mundo real.*
 
 1. **Diseño del Problema Mixto**:
    - **Opción A (Recomendada - ML/DL)**: Optimización conjunta de arquitectura e hiperparámetros de red neuronal (*Joint Neural Architecture & Hyperparameter Search*):
@@ -57,7 +57,7 @@ flowchart LR
      - *Circulares*: Programación de fases de aprendizaje (*cyclical learning rate phase/angle*).
    - **Opción B (Ingeniería Mecánica/Industrial)**: Diseño óptimo de recipiente a presión o tren de engranajes con restricciones de materiales categóricos y tolerancias difusas.
 2. **Evaluación de Rendimiento**:
-   - Comparación del ES Heterogéneo frente a búsqueda aleatoria (*Random Search*) y Optuna/TPE en dicho problema real.
+   - Comparación del ES Generalizado frente a búsqueda aleatoria (*Random Search*) y Optuna/TPE en dicho problema real.
 
 ---
 

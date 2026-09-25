@@ -25,14 +25,29 @@ from src.es_model.individual import Individual, unpack_genome
 # Default Target Optima Generator
 # -----------------------------------------------------------------------------
 
+_DEFAULT_TARGETS_CACHE: dict[tuple, dict[str, Any]] = {}
+
+
 def get_default_targets(config: ESConfig) -> dict[str, Any]:
     """Generate deterministic target optima for synthetic benchmarks."""
+    cache_key = (
+        config.n_real,
+        config.n_count,
+        config.n_binary,
+        config.n_categorical,
+        config.n_fuzzy,
+        config.n_circular,
+        tuple(config.circular_k.tolist()) if len(config.circular_k) > 0 else (),
+    )
+    if cache_key in _DEFAULT_TARGETS_CACHE:
+        return _DEFAULT_TARGETS_CACHE[cache_key]
+
     circular_k = config.circular_k if len(config.circular_k) > 0 else np.full(config.n_circular, 7, dtype=np.int64)
 
     # Target fuzzy control points: [0.2, 0.5, 0.8] repeated per fuzzy variable
     fuzzy_target = np.tile([0.2, 0.5, 0.8], config.n_fuzzy) if config.n_fuzzy > 0 else np.zeros(0)
 
-    return {
+    targets = {
         "real": np.full(config.n_real, 1.5, dtype=np.float64),
         "count": np.full(config.n_count, 5, dtype=np.int64),
         "binary": np.ones(config.n_binary, dtype=np.uint8),
@@ -41,6 +56,8 @@ def get_default_targets(config: ESConfig) -> dict[str, Any]:
         "circular": np.full(config.n_circular, 2, dtype=np.int64),
         "circular_k": circular_k,
     }
+    _DEFAULT_TARGETS_CACHE[cache_key] = targets
+    return targets
 
 
 # -----------------------------------------------------------------------------
@@ -204,9 +221,3 @@ GENERALIZED_BENCHMARKS = {
         "description": "Coupled mixed-variable benchmark with discrete regime switches",
     },
 }
-
-# Compatibility aliases
-heterogeneous_sphere = generalized_sphere
-heterogeneous_rastrigin = generalized_rastrigin
-heterogeneous_coupled = generalized_coupled
-HETEROGENEOUS_BENCHMARKS = GENERALIZED_BENCHMARKS

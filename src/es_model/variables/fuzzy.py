@@ -42,17 +42,32 @@ def _enforce_monotonic(a: float, b: float, c: float, fuzzy_epsilon: float = 1e-4
     Uses a non-collapsing structural push so triangles do not flatten.
     """
     eps = fuzzy_epsilon
-    # Sort to start from a feasible ordering.
-    a, b, c = float(np.minimum(a, b)), float(np.median([a, b, c])), float(np.maximum(b, c))
+    # Fast sorting of 3 scalars without numpy array allocation overhead.
+    a, b, c = sorted((a, b, c))
     # Push b away from a and c away from b if too close.
     if b < a + eps:
         b = a + eps
     if c < b + eps:
         c = b + eps
     # Final reflection back into [0,1] if pushes exceeded bounds.
-    a = float(np.clip(a, 0.0, 1.0 - 2 * eps))
-    b = float(np.clip(b, a + eps, 1.0 - eps))
-    c = float(np.clip(c, b + eps, 1.0))
+    if a < 0.0:
+        a = 0.0
+    elif a > 1.0 - 2 * eps:
+        a = 1.0 - 2 * eps
+
+    min_b = a + eps
+    max_b = 1.0 - eps
+    if b < min_b:
+        b = min_b
+    elif b > max_b:
+        b = max_b
+
+    min_c = b + eps
+    if c < min_c:
+        c = min_c
+    elif c > 1.0:
+        c = 1.0
+
     return a, b, c
 
 

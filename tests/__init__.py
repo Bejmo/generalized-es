@@ -1,1 +1,1 @@
-"""Unit test package for heterogeneous evolutionary strategy codebase."""
+"""Unit test package for generalized evolutionary strategy codebase."""
