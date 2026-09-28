@@ -35,13 +35,12 @@ def _reflect_unit(x: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.clip(x, 0.0, 1.0)  # Final safety clamp.
 
 
-def _enforce_monotonic(a: float, b: float, c: float, fuzzy_epsilon: float = 1e-4) -> tuple[float, float, float]:
+def _enforce_monotonic(a: float, b: float, c: float, eps: float = 1e-4) -> tuple[float, float, float]:
     """
     Guarantee a <= b <= c with epsilon margin.
 
     Uses a non-collapsing structural push so triangles do not flatten.
     """
-    eps = fuzzy_epsilon
     # Fast sorting of 3 scalars without numpy array allocation overhead.
     a, b, c = sorted((a, b, c))
     # Push b away from a and c away from b if too close.
