@@ -303,7 +303,7 @@ uv run python -m unittest discover -s tests
 
 The development dependencies include `ipykernel` for Jupyter notebooks ([`experiments/`](file:///c:/Users/bejmo/Documents/documents/GitHub/TFG/experiments)):
 
-1. **In VS Code / Cursor / PyCharm:** Open any notebook in `experiments/` and select the `.venv` Python kernel (`Python 3.12 (.venv)`).
+1. **In VS Code / PyCharm:** Open any notebook in `experiments/` and select the `.venv` Python kernel (`Python 3.12 (.venv)`).
 2. **Via Jupyter Lab / Notebook CLI:**
    ```bash
    uv run jupyter lab

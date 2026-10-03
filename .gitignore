@@ -1,16 +1,18 @@
-.venv
-.github
-openspec
+.venv/
+.github/
+.agent/
+.agents/
+.gemini/
+.vscode/
 
 # Python cache artifacts
 __pycache__/
 **/__pycache__/
 *.py[cod]
 **/*.py[cod]
+.pytest_cache/
 
-# Local runtime logs
-report.log
-
-# Save data (e.g. experiments/data/*, experiment_X_*.png, etc)
+# Save data
 experiments/data/
 experiments/*_*.png
+experiments/*
