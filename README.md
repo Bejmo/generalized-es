@@ -327,4 +327,4 @@ The development dependencies include `ipykernel` for Jupyter notebooks ([`experi
 
 ## License
 
-Academic project: Generalized Evolution Strategies for Mixed-Variable Optimization.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

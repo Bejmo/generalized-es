@@ -3,6 +3,7 @@ name = "generalized-es"
 version = "0.1.0"
 description = "Generalized Evolution Strategies for Mixed-Variable Optimization"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11, <3.14"
 dependencies = [
     "numpy",
@@ -20,6 +21,9 @@ dev = [
 [project.scripts]
 es-model = "src.es_model.main:main"
 generalized-es = "src.es_model.main:main"
+
+[project.urls]
+Repository = "https://github.com/Bejmo/tfg-generalized-es"
 
 [build-system]
 requires = ["hatchling"]
