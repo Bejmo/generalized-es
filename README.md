@@ -4,7 +4,7 @@
 [![Python: 3.12](https://img.shields.io/badge/Python-3.12+-blue.svg)](pyproject.toml)
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://docs.astral.sh/uv/)
 
-An experimental Bachelor's Thesis (TFG) in Computer Science at the **Facultat d'Informàtica de Barcelona (FIB - UPC)**, affiliated with the **ALBCOM** research group (*Algorithms, Bioinformatics, Complexity and Formal Methods*).
+An experimental Bachelor's Thesis (TFG) in Computer Science at the **Facultat d'Informàtica de Barcelona (FIB - UPC)**.
 
 This framework formalizes and implements a **Generalized $(\mu, \lambda)$-Evolution Strategy** designed for black-box optimization over heterogeneous search spaces. It co-evolves decision variables and internal strategy parameters with linear $\mathcal{O}(n)$ per-generation complexity, featuring native support for **6 distinct variable domains**, dual discrete/intermediate recombination, and modular benchmark suites.
 
