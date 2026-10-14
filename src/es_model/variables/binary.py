@@ -65,6 +65,7 @@ class BinaryVariable(Variable):
         values: NDArray[np.uint8],
         strategy: NDArray[np.float64],
         max_logit_binary: float = 0.0,
+        min_logit_binary: float = -4.6,
     ) -> None:
         super().__init__(
             name="binary",
@@ -73,8 +74,10 @@ class BinaryVariable(Variable):
             strategy_recomb="arithmetic",
             adaptation_type="logit",
             max_logit=max_logit_binary,
+            min_logit=min_logit_binary,
         )
         self.max_logit_binary: float = max_logit_binary
+        self.min_logit_binary: float = min_logit_binary
 
     @classmethod
     def random(cls, config: ESConfig, rng: np.random.Generator) -> BinaryVariable:
@@ -86,10 +89,12 @@ class BinaryVariable(Variable):
         )
         strategy = np.full(config.n_binary, config.init_logit_binary, dtype=np.float64)
         max_logit = getattr(config, "max_logit_binary", 0.0)
+        min_logit = getattr(config, "min_logit_binary", -4.6)
         return cls(
             values=values,
             strategy=strategy,
             max_logit_binary=max_logit,
+            min_logit_binary=min_logit,
         )
 
     def copy(self) -> BinaryVariable:
@@ -98,6 +103,7 @@ class BinaryVariable(Variable):
             values=self.values.copy(),
             strategy=self.strategy.copy(),
             max_logit_binary=self.max_logit_binary,
+            min_logit_binary=self.min_logit_binary,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:
@@ -107,3 +113,10 @@ class BinaryVariable(Variable):
             self.strategy,
             rng,
         )
+
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """Compute Hamming distance (number of bit mismatches)."""
+        other_vals = other.values if isinstance(other, Variable) else np.asarray(other, dtype=np.uint8)
+        if self.dim == 0 or other_vals.shape[0] == 0:
+            return 0.0
+        return float(np.sum(self.values != other_vals))

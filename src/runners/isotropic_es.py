@@ -18,8 +18,8 @@ def run(fn, dim, bounds, seed, max_evals, *, mu=15, lam=100, **kwargs) -> np.nda
     # tau0 = 1 / sqrt(2 * dim) (standard global learning rate)
     tau0 = 1.0 / np.sqrt(2.0 * dim)
     
-    # Initial sigma: 0.5 (matches Prototype 1 initialization)
-    init_sigma = 0.5
+    # Initial step-size sigma0: 0.3 * (bounds[1] - bounds[0])
+    init_sigma = 0.3 * (bounds[1] - bounds[0])
     sigma_floor = 1e-6
     
     # Create initial population

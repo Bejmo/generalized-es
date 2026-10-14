@@ -122,7 +122,11 @@ class RealVariable(Variable):
             if config.n_real > 0
             else np.zeros(0, dtype=np.float64)
         )
-        strategy = np.full(config.n_real, config.init_sigma_real, dtype=np.float64)
+        strategy = (
+            (0.3 * (real_b[:, 1] - real_b[:, 0])).astype(np.float64)
+            if config.n_real > 0
+            else np.zeros(0, dtype=np.float64)
+        )
         ceiling_factor = getattr(config, "sigma_ceiling_factor", 0.3)
         sigma_ceiling = (
             ceiling_factor * (real_b[:, 1] - real_b[:, 0])
@@ -155,3 +159,10 @@ class RealVariable(Variable):
             rng,
             self.bounds,
         )
+
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """Compute Euclidean squared distance between real variables."""
+        other_vals = other.values if isinstance(other, Variable) else np.asarray(other, dtype=np.float64)
+        if self.dim == 0 or other_vals.shape[0] == 0:
+            return 0.0
+        return float(np.sum((self.values - other_vals) ** 2))

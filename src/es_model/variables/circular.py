@@ -114,7 +114,7 @@ class CircularVariable(Variable):
             values=values,
             strategy=strategy,
             circular_k=config.circular_k,
-            sigma_floor=config.sigma_floor,
+            sigma_floor=getattr(config, "lambda_floor_circular", 1e-2),
             lambda_ceiling=lambda_ceiling,
         )
 
@@ -136,3 +136,13 @@ class CircularVariable(Variable):
             rng,
             self.circular_k,
         )
+
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """Compute shortest modular geodesic squared distance on the circle."""
+        other_vals = other.values if isinstance(other, Variable) else np.asarray(other, dtype=np.int64)
+        if self.dim == 0 or other_vals.shape[0] == 0:
+            return 0.0
+        k = self.circular_k
+        diff = np.abs(self.values - other_vals) % k
+        geodesic = np.minimum(diff, k - diff)
+        return float(np.sum(geodesic ** 2))

@@ -44,8 +44,8 @@ def get_default_targets(config: ESConfig) -> dict[str, Any]:
 
     circular_k = config.circular_k if len(config.circular_k) > 0 else np.full(config.n_circular, 7, dtype=np.int64)
 
-    # Target fuzzy control points: [0.2, 0.5, 0.8] repeated per fuzzy variable
-    fuzzy_target = np.tile([0.2, 0.5, 0.8], config.n_fuzzy) if config.n_fuzzy > 0 else np.zeros(0)
+    # Target fuzzy parameters: [0.5, 0.3] (center=0.5, dispersion=0.3) per fuzzy variable
+    fuzzy_target = np.tile([0.5, 0.3], config.n_fuzzy) if config.n_fuzzy > 0 else np.zeros(0)
 
     targets = {
         "real": np.full(config.n_real, 1.5, dtype=np.float64),
@@ -89,8 +89,12 @@ def generalized_sphere(
     # 4. Categorical: Misclassification count
     cost_cat = float(np.sum(u.categorical != t["categorical"])) if cfg.n_categorical > 0 else 0.0
 
-    # 5. Fuzzy: Control points Euclidean distance
-    cost_fuzzy = float(np.sum((u.fuzzy - t["fuzzy"]) ** 2)) if cfg.n_fuzzy > 0 else 0.0
+    # 5. Fuzzy: Canonical center-dispersion squared distance
+    cost_fuzzy = 0.0
+    if cfg.n_fuzzy > 0:
+        m1, d1 = u.fuzzy[0::2], u.fuzzy[1::2]
+        m2, d2 = t["fuzzy"][0::2], t["fuzzy"][1::2]
+        cost_fuzzy = float(3.0 * np.sum((m1 - m2) ** 2) + 2.0 * np.sum((d1 - d2) ** 2))
 
     # 6. Circular: Shortest modular distance on circle
     cost_circ = 0.0
@@ -143,7 +147,7 @@ def generalized_rastrigin(
     cost_fuzzy = 0.0
     if cfg.n_fuzzy > 0:
         diff_f = u.fuzzy - t["fuzzy"]
-        n_pts = cfg.n_fuzzy * 3
+        n_pts = cfg.n_fuzzy * 2
         cost_fuzzy = float(5.0 * n_pts + np.sum(diff_f ** 2 - 5.0 * np.cos(2.0 * np.pi * diff_f)))
 
     # 6. Circular Phase Cosine Distance
@@ -194,7 +198,12 @@ def generalized_coupled(
     cost_count = float(np.sum((u.count - t["count"]) ** 2)) if cfg.n_count > 0 else 0.0
 
     # Fuzzy component scaled by count error
-    cost_fuzzy = float(count_scale * np.sum((u.fuzzy - t["fuzzy"]) ** 2)) if cfg.n_fuzzy > 0 else 0.0
+    cost_fuzzy = 0.0
+    if cfg.n_fuzzy > 0:
+        m1, d1 = u.fuzzy[0::2], u.fuzzy[1::2]
+        m2, d2 = t["fuzzy"][0::2], t["fuzzy"][1::2]
+        f_dist = float(3.0 * np.sum((m1 - m2) ** 2) + 2.0 * np.sum((d1 - d2) ** 2))
+        cost_fuzzy = float(count_scale * f_dist)
 
     # Circular component
     cost_circ = 0.0

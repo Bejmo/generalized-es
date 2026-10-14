@@ -58,10 +58,14 @@ class ESConfig:
     # -----------------------------------------------------------------------------
     # 4. Self-Adaptation Constants
     # -----------------------------------------------------------------------------
-    sigma_floor: float = 1e-6      # Stability floor for strategy parameters
+    sigma_floor: float = 1e-6      # Stability floor for continuous strategy parameters
+    lambda_floor_count: float = 1e-2 # Minimum Poisson rate floor for counts to prevent discrete freezing
+    lambda_floor_circular: float = 1e-2 # Minimum Poisson rate floor for circulars
     sigma_ceiling_fuzzy: float = 0.5  # Maximum sigma for fuzzy [0,1] domain (prevents drift)
     sigma_ceiling_factor: float = 0.3 # Maximum mutation step ratio relative to domain range
     max_logit_binary: float = 0.0  # Maximum logit for binary flips (p_flip <= 0.5)
+    min_logit_binary: float = -4.6 # Minimum logit for binary flips (p_flip >= 0.01 / 1%)
+    max_logit_categorical: float = 4.8 # Maximum logit for categorical classes (P_target <= 0.99 / 99%)
 
     # -----------------------------------------------------------------------------
     # 5. Initial Strategy Parameter Defaults
@@ -75,7 +79,8 @@ class ESConfig:
     # -----------------------------------------------------------------------------
     # 6. Fuzzy Structural Constants
     # -----------------------------------------------------------------------------
-    fuzzy_epsilon: float = 1e-4    # Minimum margin between a, b, c to avoid collapse
+    fuzzy_epsilon: float = 1e-4    # Minimum dispersion floor for fuzzy variables to avoid collapse
+    d_max_fuzzy: float = 1.0       # Maximum dispersion ceiling for fuzzy variables in [0, 1]
 
     # -----------------------------------------------------------------------------
     # 7. Deterministic Seed and Runtime Toggles
@@ -95,7 +100,7 @@ class ESConfig:
             + self.n_count
             + self.n_binary
             + self.n_categorical
-            + self.n_fuzzy * 3
+            + self.n_fuzzy * 2
             + self.n_circular
         )
 
@@ -132,8 +137,8 @@ class ESConfig:
 
     @property
     def init_sigma_real(self) -> float:
-        """Initial mutation step-size for reals (~1/3 of domain range)."""
-        return (self.upper_bound_real - self.lower_bound_real) / 3.0
+        """Initial mutation step-size for reals (0.3 of domain range)."""
+        return 0.3 * (self.upper_bound_real - self.lower_bound_real)
 
     @property
     def tau_prime_and_tau(self) -> tuple[float, float]:

@@ -58,12 +58,31 @@ class TestIndividualAndES(unittest.TestCase):
         self.assertEqual(ind.count.shape[0], 3)
         self.assertEqual(ind.binary.shape[0], 4)
         self.assertEqual(ind.categorical.shape[0], 2)
-        self.assertEqual(ind.fuzzy.shape[0], 6)
+        self.assertEqual(ind.fuzzy.shape[0], 4)  # 2 fuzzy vars * 2 dims (m, d)
         self.assertEqual(ind.circular.shape[0], 2)
 
-        # Flattened genome length
-        expected_len = 4 + 3 + 4 + 2 + 6 + 2
+        # Dimension interface
+        expected_len = 4 + 3 + 4 + 2 + 4 + 2
         self.assertEqual(ind.genome.shape[0], expected_len)
+        self.assertEqual(ind.total_dim, expected_len)
+        self.assertEqual(ind.total_num_variables, 4 + 3 + 4 + 2 + 2 + 2)
+        self.assertAlmostEqual(ind.distance_squared(ind), 0.0)
+
+    def test_individual_distance_squared_properties(self) -> None:
+        ind1 = Individual.random(self.rng, self.config)
+        ind2 = Individual.random(self.rng, self.config)
+
+        dist12 = ind1.distance_squared(ind2)
+        dist21 = ind2.distance_squared(ind1)
+
+        # Non-negativity and positive definiteness
+        self.assertGreater(dist12, 0.0)
+        # Symmetry
+        self.assertAlmostEqual(dist12, dist21, places=6)
+
+        # Additivity: sum of each variable's distance_squared equals individual's distance_squared
+        manual_sum = sum(ind1.variables[k].distance_squared(ind2.variables[k]) for k in ind1.variables)
+        self.assertAlmostEqual(dist12, manual_sum, places=6)
 
     def test_individual_clone(self) -> None:
         ind = Individual.random(self.rng, self.config)

@@ -22,9 +22,11 @@ if TYPE_CHECKING:
 def center_categorical_logits(
     cat_logits: NDArray[np.float64],
     categorical_k: NDArray[np.int64],
+    max_logit: float | None = None,
 ) -> NDArray[np.float64]:
     """
     Center each categorical variable's logit slice around 0 to eliminate gauge freedom in softmax.
+    Optionally clips to [-max_logit, max_logit] to prevent probability saturation and genetic freezing.
     """
     if cat_logits.shape[0] == 0:
         return cat_logits.copy()
@@ -33,7 +35,13 @@ def center_categorical_logits(
     for k in categorical_k:
         k_int = int(k)
         slice_vals = centered[offset : offset + k_int]
-        centered[offset : offset + k_int] = slice_vals - np.mean(slice_vals)
+        c_vals = slice_vals - np.mean(slice_vals)
+        if max_logit is not None:
+            c_vals = np.clip(c_vals, -max_logit, max_logit)
+            c_vals -= np.mean(c_vals)
+            c_vals = np.clip(c_vals, -max_logit, max_logit)
+            c_vals -= np.mean(c_vals)
+        centered[offset : offset + k_int] = c_vals
         offset += k_int
     return centered
 
@@ -109,6 +117,7 @@ class CategoricalVariable(Variable):
         values: NDArray[np.int64],
         strategy: NDArray[np.float64],
         categorical_k: NDArray[np.int64],
+        max_logit_categorical: float = 4.8,
     ) -> None:
         super().__init__(
             name="categorical",
@@ -116,8 +125,10 @@ class CategoricalVariable(Variable):
             strategy=strategy,
             strategy_recomb="arithmetic",
             adaptation_type="logit",
+            max_logit=max_logit_categorical,
         )
         self.categorical_k: NDArray[np.int64] = np.asarray(categorical_k, dtype=np.int64)
+        self.max_logit_categorical: float = max_logit_categorical
 
     @classmethod
     def random(cls, config: ESConfig, rng: np.random.Generator) -> CategoricalVariable:
@@ -128,10 +139,12 @@ class CategoricalVariable(Variable):
             else np.zeros(0, dtype=np.int64)
         )
         strategy = np.full(config.total_cat_logits, config.init_logit_cat, dtype=np.float64)
+        max_logit = getattr(config, "max_logit_categorical", 4.8)
         return cls(
             values=values,
             strategy=strategy,
             categorical_k=config.categorical_k,
+            max_logit_categorical=max_logit,
         )
 
     def copy(self) -> CategoricalVariable:
@@ -140,6 +153,7 @@ class CategoricalVariable(Variable):
             values=self.values.copy(),
             strategy=self.strategy.copy(),
             categorical_k=self.categorical_k.copy(),
+            max_logit_categorical=self.max_logit_categorical,
         )
 
     def _post_adapt_strategy(
@@ -148,8 +162,12 @@ class CategoricalVariable(Variable):
         tau_prime: float,
         tau: float,
     ) -> None:
-        """Center logits around zero to eliminate gauge freedom in softmax."""
-        self.strategy = center_categorical_logits(self.strategy, self.categorical_k)
+        """Center logits around zero and enforce max_logit bound to prevent freezing."""
+        self.strategy = center_categorical_logits(
+            self.strategy,
+            self.categorical_k,
+            max_logit=self.max_logit_categorical,
+        )
 
     def mutate(self, rng: np.random.Generator) -> None:
         """Apply softmax sampling per categorical variable slice."""
@@ -159,3 +177,10 @@ class CategoricalVariable(Variable):
             rng,
             self.categorical_k,
         )
+
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """Compute 0-1 misclassification count across categories."""
+        other_vals = other.values if isinstance(other, Variable) else np.asarray(other, dtype=np.int64)
+        if self.dim == 0 or other_vals.shape[0] == 0:
+            return 0.0
+        return float(np.sum(self.values != other_vals))

@@ -98,6 +98,7 @@ class Variable(ABC):
         sigma_floor: float = 1e-6,
         strategy_ceiling: float | NDArray[np.float64] | None = None,
         max_logit: float | None = None,
+        min_logit: float | None = None,
     ) -> None:
         self.name = name
         self.values = values
@@ -107,10 +108,21 @@ class Variable(ABC):
         self.sigma_floor = sigma_floor
         self.strategy_ceiling = strategy_ceiling
         self.max_logit = max_logit
+        self.min_logit = min_logit
+
+    @property
+    def dims_per_var(self) -> int:
+        """Number of scalar decision dimensions per logical variable (default: 1)."""
+        return 1
+
+    @property
+    def num_variables(self) -> int:
+        """Number of logical decision variables represented by this block."""
+        return self.dim // self.dims_per_var if self.dims_per_var > 0 else self.dim
 
     @property
     def dim(self) -> int:
-        """Number of decision variables in this block."""
+        """Total scalar decision dimensions in this block."""
         return int(self.values.shape[0])
 
     @property
@@ -127,6 +139,13 @@ class Variable(ABC):
     @abstractmethod
     def copy(self) -> Variable:
         """Create a deep copy of this variable block with independent NumPy arrays."""
+        ...
+
+    @abstractmethod
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """
+        Compute the canonical squared metric distance between this block and another.
+        """
         ...
 
     def adapt_strategy(
@@ -151,6 +170,7 @@ class Variable(ABC):
                 rng,
                 tau,
                 max_logit=self.max_logit,
+                min_logit=self.min_logit,
             )
         else:
             raise ValueError(f"Unknown adaptation_type: {self.adaptation_type}")

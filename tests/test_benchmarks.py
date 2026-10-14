@@ -68,6 +68,24 @@ class TestGeneralizedBenchmarks(unittest.TestCase):
             self.assertIsInstance(val, float)
             self.assertGreaterEqual(val, 0.0)
 
+    def test_decomposition_at_optimum(self) -> None:
+        from experiments.utils.runners import compute_heterogeneous_decomposition
+        targets = get_default_targets(self.config)
+        ind = Individual.random(self.rng, self.config)
+
+        ind.variables["real"].values = targets["real"].copy()
+        ind.variables["count"].values = targets["count"].copy()
+        ind.variables["binary"].values = targets["binary"].copy()
+        ind.variables["categorical"].values = targets["categorical"].copy()
+        ind.variables["fuzzy"].values = targets["fuzzy"].copy()
+        ind.variables["circular"].values = targets["circular"].copy()
+
+        for b_name in ["Generalized_Sphere", "Generalized_Rastrigin", "Generalized_Coupled"]:
+            decomp = compute_heterogeneous_decomposition(ind, b_name, self.config)
+            tot = sum(decomp.values())
+            self.assertAlmostEqual(tot, 0.0, places=5)
+
 
 if __name__ == "__main__":
     unittest.main()
+

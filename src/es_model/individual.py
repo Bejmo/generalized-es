@@ -109,6 +109,24 @@ class Individual:
     def lambda_circular(self) -> NDArray[np.float64]:
         return self.variables["circular"].strategy if "circular" in self.variables else np.zeros(0, dtype=np.float64)
 
+    @property
+    def total_dim(self) -> int:
+        """Total scalar decision dimensions in genome across all variable blocks."""
+        return sum(var.dim for var in self.variables.values())
+
+    @property
+    def total_num_variables(self) -> int:
+        """Total logical decision variables across all blocks."""
+        return sum(var.num_variables for var in self.variables.values())
+
+    def distance_squared(self, other: Individual) -> float:
+        """Compute heterogeneous sum of squared canonical distances across all active blocks."""
+        return float(sum(
+            self.variables[k].distance_squared(other.variables[k])
+            for k in self.variables
+            if k in other.variables
+        ))
+
     # -------------------------------------------------------------------------
     # Lifecycle & Genetic Operator Methods
     # -------------------------------------------------------------------------
@@ -269,9 +287,9 @@ def unpack_genome(
     cat = np.round(vec[offset : offset + cfg.n_categorical]).astype(np.int64)
     offset += cfg.n_categorical
 
-    # 5. Fuzzy (triplets)
-    fuzzy = vec[offset : offset + cfg.n_fuzzy * 3]
-    offset += cfg.n_fuzzy * 3
+    # 5. Fuzzy (center, dispersion pairs)
+    fuzzy = vec[offset : offset + cfg.n_fuzzy * 2]
+    offset += cfg.n_fuzzy * 2
 
     # 6. Circular
     circ = np.round(vec[offset : offset + cfg.n_circular]).astype(np.int64)

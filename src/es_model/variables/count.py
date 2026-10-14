@@ -113,7 +113,7 @@ class CountVariable(Variable):
             values=values,
             strategy=strategy,
             bounds=count_b,
-            sigma_floor=config.sigma_floor,
+            sigma_floor=getattr(config, "lambda_floor_count", 1e-2),
             lambda_ceiling=lambda_ceiling,
         )
 
@@ -135,3 +135,10 @@ class CountVariable(Variable):
             rng,
             self.bounds,
         )
+
+    def distance_squared(self, other: Variable | NDArray[Any]) -> float:
+        """Compute squared Euclidean distance on integer counts."""
+        other_vals = other.values if isinstance(other, Variable) else np.asarray(other, dtype=np.int64)
+        if self.dim == 0 or other_vals.shape[0] == 0:
+            return 0.0
+        return float(np.sum((self.values.astype(np.float64) - other_vals.astype(np.float64)) ** 2))

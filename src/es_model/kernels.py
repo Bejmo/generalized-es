@@ -79,12 +79,14 @@ def adapt_logits(
     rng: np.random.Generator,
     tau: float,
     max_logit: float | None = None,
+    min_logit: float | None = None,
 ) -> NDArray[np.float64]:
     """
     Apply additive Gaussian noise to logit-space strategy parameters.
 
     The mapping to probability happens via sigmoid at mutation time.
     Optional max_logit upper bound prevents hypermutation (e.g., max_logit=0 gives p <= 0.5).
+    Optional min_logit lower bound prevents genetic freezing (e.g., min_logit=-4.6 gives p >= 0.01).
 
     Parameters
     ----------
@@ -96,6 +98,8 @@ def adapt_logits(
         Local learning rate.
     max_logit : float, optional
         Upper bound on logits.
+    min_logit : float, optional
+        Lower bound on logits.
 
     Returns
     -------
@@ -109,6 +113,8 @@ def adapt_logits(
     updated = logits + noise
     if max_logit is not None:
         np.minimum(updated, max_logit, out=updated)
+    if min_logit is not None:
+        np.maximum(updated, min_logit, out=updated)
     return updated
 
 
