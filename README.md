@@ -1,4 +1,4 @@
-﻿# Generalized Evolution Strategies for Mixed-Variable Optimization
+# Generalized Evolution Strategies for Mixed-Variable Optimization
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python: 3.12](https://img.shields.io/badge/Python-3.12+-blue.svg)](pyproject.toml)
@@ -96,9 +96,9 @@ uv run es-model benchmarks --dim 20 --max-evals 50000 --seeds 5
 
 In-depth empirical notebooks are available under [`experiments/`](experiments):
 
-* [`experiment_1.ipynb`](experiments/experiment_1.ipynb): Equal-budget benchmark comparisons against CMA-ES and Isotropic ES.
-* [`experiment_2.ipynb`](experiments/experiment_2.ipynb): Simultaneous co-evolution across all 6 variable types on synthetic heterogeneous landscapes.
-* [`experiment_3_ablations.ipynb`](experiments/experiment_3_ablations.ipynb): Ablation studies and convergence invariant analysis.
+* [`experiment_1.ipynb`](experiments/experiment_1.ipynb): Equal-budget continuous benchmark comparisons against CMA-ES and Isotropic ES.
+* [`experiment_2.ipynb`](experiments/experiment_2.ipynb): Dynamic Target Shift (DTS) tracking and mutation self-adaptation across all 6 variable types in isolation.
+* [`experiment_3.ipynb`](experiments/experiment_3.ipynb): Simultaneous co-evolution across all 6 variable types on synthetic heterogeneous landscapes.
 
 To launch a Jupyter session:
 

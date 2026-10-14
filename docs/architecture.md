@@ -1,4 +1,4 @@
-﻿# Architecture & Technical Documentation
+# Architecture & Technical Documentation
 
 This document provides in-depth technical documentation for the **Generalized Evolution Strategies (ES)** framework, covering module design, execution control flows, genome data structures, and the complete dependency matrix.
 
@@ -128,8 +128,8 @@ TFG/
 │   └── test_benchmarks.py                                  #     Continuous & generalized benchmark landscape tests
 └── experiments/                                            # Experimental Notebooks
     ├── experiment_1.ipynb                                  #     Equal-budget benchmark comparisons and plots
-    ├── experiment_2.ipynb                                  #     Synthetic mixed-variable optimization across all 6 variable types
-    └── experiment_3_ablations.ipynb                        #     Ablation studies and invariant convergence analysis
+    ├── experiment_2.ipynb                                  #     Dynamic Target Shift (DTS) transversal dynamic tracking
+    └── experiment_3.ipynb                                  #     Synthetic mixed-variable optimization across all 6 variable types
 ```
 
 ---
