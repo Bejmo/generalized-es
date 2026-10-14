@@ -15,4 +15,3 @@ __pycache__/
 # Save data
 experiments/data/
 experiments/*_*.png
-experiments/*
