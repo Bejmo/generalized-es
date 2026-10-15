@@ -22,7 +22,7 @@ from .individual import Individual
 from .generalized_es import GeneralizedES
 
 RUNNERS = {
-    "Prototype 1": custom_es.run,
+    "GeneralizedES": custom_es.run,
     "Isotropic ES (Simple Self-Adaptive)": isotropic_es.run,
     "sep-CMA-ES (Separable CMA-ES)": sep_cma_es.run,
     "Standard CMA-ES (Upper Bound)": standard_cma_es.run,
@@ -137,7 +137,7 @@ def run_benchmarks(dim: int = 10, max_evals: int = 10_000, n_seeds: int = 10) ->
         for rname, runner in RUNNERS.items():
             traces = []
             for seed in seeds:
-                if rname == "Prototype 1":
+                if rname in ("GeneralizedES", "Prototype 1"):
                     proto_config = ESConfig(
                         n_real=b_dim,
                         n_count=0,

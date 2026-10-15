@@ -70,7 +70,7 @@ def run_experiment_1():
     print("=" * 80)
 
     for bench in benchmarks:
-        prop_key = f"{bench}__Prototype_1"
+        prop_key = f"{bench}__GeneralizedES" if f"{bench}__GeneralizedES" in data else f"{bench}__Prototype_1"
         prop_final = data[prop_key][:, -1]  # (10,)
         
         bench_records = []
