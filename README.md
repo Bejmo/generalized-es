@@ -20,20 +20,28 @@ The framework natively co-evolves 6 decision variable domains alongside their re
 | **Count ($\mathbb{Z}$)** | $`\mathbb{Z}_{\ge 0}^{N_\text{count}}`$ | $`\boldsymbol{\lambda}_\text{count} \in \mathbb{R}_{>0}^{N_\text{count}}`$ | Symmetric Skellam | Difference of Poissons: $`x' = \text{clip}(x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda), [L, U])`$ |
 | **Binary ($\mathbb{B}$)** | $`\{0, 1\}^{N_\text{binary}}`$ | $`\mathbf{z}_\text{bin} \in \mathbb{R}^{N_\text{binary}}`$ | Bit-Flip (XOR) | Guided by Bernoulli($`p`$), where $`p = \sigma(z) \in (0, 1)`$ |
 | **Categorical ($\mathbb{C}$)** | $`\prod_k \{0, \dots, K_k - 1\}`$ | $`\mathbf{z}_\text{cat} \in \mathbb{R}^{\sum K_k}`$ | Softmax Resampling | Sample from categorical distribution: $`p_k = \text{softmax}(\mathbf{z}_k)`$ |
-| **Fuzzy ($\mathbb{F}$)** | $`([0, 1] \times [\epsilon, d_\max])^{N_\text{fuzzy}}`$ | $`\boldsymbol{\sigma}_\text{fuzzy} \in \mathbb{R}_{>0}^{2 \cdot N_\text{fuzzy}}`$ | Dual Gaussian Reflection | Perturb $`(m, d)`$: reflect $`m' \in [0, 1]`$, reflect & clamp $`d' \in [\epsilon, d_\max]`$ |
+| **Fuzzy ($\mathbb{F}$)** | $`([0, 1] \times [\epsilon, d_\text{max}])^{N_\text{fuzzy}}`$ | $`\boldsymbol{\sigma}_\text{fuzzy} \in \mathbb{R}_{>0}^{2 \cdot N_\text{fuzzy}}`$ | Dual Gaussian Reflection | Perturb $`(m, d)`$: reflect $`m' \in [0, 1]`$, reflect & clamp $`d' \in [\epsilon, d_\text{max}]`$ |
 | **Circular ($\mathbb{O}$)** | $`\prod_k \mathbb{Z}_{K_k}`$ | $`\boldsymbol{\lambda}_\text{circ} \in \mathbb{R}_{>0}^{N_\text{circ}}`$ | Modular Skellam | Ring offset: $`x' = (x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda)) \pmod{K_k}`$ |
-
-> [!NOTE]
-> **Fuzzy Variable Parameterization:** Each triangular fuzzy variable is parameterized by a contiguous pair $`(m, d)`$ denoting modal center $`m \in [0, 1]`$ and dispersion half-width $`d \in [\epsilon, d_\max]`$, inducing triangular membership $`\mu(x) = \max\left(0, 1 - \frac{|x-m|}{d}\right)`$. Phenotypically, it decodes to control points $`a = \max(0, m - d)`$, $`b = m`$, and $`c = \min(1, m + d)`$. Pair-wise discrete recombination is applied atomically to preserve physical coupling between center and spread.
 
 ### Self-Adaptation Dynamics
 
-- **Global & Coordinate Learning Rates:**
-  $$\tau' = \frac{1}{\sqrt{2 \cdot N_{\text{total}}}}, \quad \tau = \frac{1}{\sqrt{2 \cdot \sqrt{N_{\text{total}}}}}$$
-- **Log-Normal Scale Adaptation** ($`\boldsymbol{\sigma}_\text{real}, \boldsymbol{\lambda}_\text{count}, \boldsymbol{\sigma}_\text{fuzzy}, \boldsymbol{\lambda}_\text{circ}`$):
-  $$\sigma_i' = \max\left(\sigma_{\text{floor}}, \, \sigma_i \cdot \exp\left(\tau' \cdot \mathcal{N}(0,1) + \tau \cdot \mathcal{N}_i(0,1)\right)\right), \quad \sigma_{\text{floor}} = 10^{-6}$$
-- **Logit-Normal Probability Adaptation** ($`\mathbf{z}_\text{bin}, \mathbf{z}_\text{cat}`$):
-  $$\mathbf{z}_i' = \mathbf{z}_i + \tau \cdot \mathcal{N}_i(0, \mathbf{I})$$
+**Global & Coordinate Learning Rates:**
+
+$$
+\tau' = \frac{1}{\sqrt{2 \cdot N_\text{total}}}, \quad \tau = \frac{1}{\sqrt{2 \cdot \sqrt{N_\text{total}}}}
+$$
+
+**Log-Normal Scale Adaptation** ($`\boldsymbol{\sigma}_\text{real}, \boldsymbol{\lambda}_\text{count}, \boldsymbol{\sigma}_\text{fuzzy}, \boldsymbol{\lambda}_\text{circ}`$):
+
+$$
+\sigma_i' = \max\left(\sigma_\text{floor}, \, \sigma_i \cdot \exp\left(\tau' \mathcal{N}(0, 1) + \tau \mathcal{N}_i(0, 1)\right)\right), \quad \sigma_\text{floor} = 10^{-6}
+$$
+
+**Logit-Normal Probability Adaptation** ($`\mathbf{z}_\text{bin}, \mathbf{z}_\text{cat}`$):
+
+$$
+\mathbf{z}_i' = \mathbf{z}_i + \tau \mathcal{N}_i(0, \mathbf{I})
+$$
 
 ---
 
@@ -77,7 +85,7 @@ uv run es-model
 Launches an interactive terminal menu with options:
 1. `model`: Runs the Generalized ES optimization loop on the default mixed configuration.
 2. `benchmarks`: Evaluates baseline optimizers (*Isotropic ES*, *sep-CMA-ES*, *Standard CMA-ES*).
-3. `smoke`: Fast sanity verification with minimal budget ($\text{dim}=5, \text{evals}=200$).
+3. `smoke`: Fast sanity verification with minimal budget (`dim=5`, `evals=200`).
 4. `all`: Executes `model` followed by `benchmarks`.
 
 ### Direct CLI Workflows
