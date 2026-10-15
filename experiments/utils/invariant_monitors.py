@@ -111,68 +111,50 @@ def compute_flip_rate(old_binary: np.ndarray, new_binary: np.ndarray) -> float:
 
 # 4. Categorical Variable Monitor
 
+def check_categorical_validity(individual: Individual, config: ESConfig) -> int:
+    """
+    Check that all categorical values are integers within valid category domain [0, K_i - 1].
+    """
+    vals = individual.categorical
+    if len(vals) == 0:
+        return 0
+    violations = 0
+    for i, k in enumerate(config.categorical_k):
+        if vals[i] < 0 or vals[i] >= k:
+            violations += 1
+    return int(violations)
+
+
 def check_gauge_residual(individual: Individual, config: ESConfig) -> np.ndarray:
     """
-    Compute sum of logits per categorical variable slice.
-    Must be close to 0 (< 1e-12) if zero-mean centering is applied.
+    Under the unified 1-logit model, gauge freedom is trivially 0.
+    Returns zeros of shape (n_categorical,).
     """
-    logits = individual.logit_cat
-    if len(logits) == 0:
-        return np.array([], dtype=np.float64)
-
-    residuals = []
-    offset = 0
-    for k in config.categorical_k:
-        k_int = int(k)
-        slice_logits = logits[offset : offset + k_int]
-        residuals.append(float(np.sum(slice_logits)))
-        offset += k_int
-    return np.array(residuals, dtype=np.float64)
+    return np.zeros(config.n_categorical, dtype=np.float64)
 
 
 def compute_softmax_entropy(individual: Individual, config: ESConfig) -> np.ndarray:
     """
-    Compute normalized Shannon entropy of softmax probability distribution per categorical variable.
-
-    H(p) = -sum p_c * log(p_c) / log(k)
+    Normalized binary entropy of mutation probability for each categorical variable:
+    H(p) = - (p * log2(p) + (1-p) * log2(1-p))
     """
     logits = individual.logit_cat
     if len(logits) == 0:
         return np.array([], dtype=np.float64)
-
-    entropies = []
-    offset = 0
-    for k in config.categorical_k:
-        k_int = int(k)
-        slice_logits = logits[offset : offset + k_int]
-        # Numerically stable softmax
-        exp_z = np.exp(slice_logits - np.max(slice_logits))
-        probs = exp_z / np.sum(exp_z)
-        # Shannon entropy
-        h = -np.sum(probs * np.log(probs + 1e-15))
-        h_norm = h / np.log(k_int)  # Normalized to [0, 1]
-        entropies.append(float(h_norm))
-        offset += k_int
-    return np.array(entropies, dtype=np.float64)
+    probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -700.0, 700.0)))
+    probs = np.clip(probs, 1e-12, 1.0 - 1e-12)
+    h = -(probs * np.log2(probs) + (1.0 - probs) * np.log2(1.0 - probs))
+    return h.astype(np.float64)
 
 
 def compute_logit_norm(individual: Individual, config: ESConfig) -> np.ndarray:
     """
-    Compute L2 norm of logit vector per categorical variable.
-    Detects gauge drift when zero-mean centering is ablated.
+    Absolute magnitude of mutation logit per categorical variable.
     """
     logits = individual.logit_cat
     if len(logits) == 0:
         return np.array([], dtype=np.float64)
-
-    norms = []
-    offset = 0
-    for k in config.categorical_k:
-        k_int = int(k)
-        slice_logits = logits[offset : offset + k_int]
-        norms.append(float(np.linalg.norm(slice_logits)))
-        offset += k_int
-    return np.array(norms, dtype=np.float64)
+    return np.abs(logits)
 
 
 # 5. Fuzzy Variable Monitor

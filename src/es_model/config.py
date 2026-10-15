@@ -65,7 +65,8 @@ class ESConfig:
     sigma_ceiling_factor: float = 0.3 # Maximum mutation step ratio relative to domain range
     max_logit_binary: float = 0.0  # Maximum logit for binary flips (p_flip <= 0.5)
     min_logit_binary: float = -4.6 # Minimum logit for binary flips (p_flip >= 0.01 / 1%)
-    max_logit_categorical: float = 4.8 # Maximum logit for categorical classes (P_target <= 0.99 / 99%)
+    max_logit_categorical: float = 0.0 # Maximum logit for categorical mutation (p_mut <= 0.5)
+    min_logit_categorical: float = -4.6 # Minimum logit for categorical mutation (p_mut >= 0.01 / 1%)
     strategy_recomb_scale: str = "geometric"  # "geometric" | "arithmetic" for scale parameters
     circular_mutation_operator: str = "skellam"  # "skellam" | "forced_step"
 
@@ -75,7 +76,7 @@ class ESConfig:
     init_lambda_count: float = 1.0  # Initial Poisson rate for counts
     init_sigma_fuzzy: float = 0.05  # Initial sigma for fuzzy control points
     init_logit_binary: float = -2.0 # Initial logit for binary flip probability (p ~ 0.119)
-    init_logit_cat: float = 0.0     # Initial logit for categorical mutation prob (p=0.5)
+    init_logit_cat: float = -2.0    # Initial logit for categorical mutation prob (p ~ 0.119)
     init_lambda_circular: float = 1.0 # Initial Poisson rate for modular Skellam circulars
 
     # -----------------------------------------------------------------------------
@@ -108,8 +109,8 @@ class ESConfig:
 
     @property
     def total_cat_logits(self) -> int:
-        """Total number of logit dimensions for all categorical variables."""
-        return int(np.sum(self.categorical_k)) if self.n_categorical > 0 else 0
+        """Total number of strategy logit dimensions for all categorical variables."""
+        return self.n_categorical
 
     @property
     def real_bounds(self) -> NDArray[np.float64]:

@@ -89,25 +89,22 @@ def plot_dts_strategy(
     q75_s = np.percentile(strat_arr, 75, axis=0)
 
     ax_twin = None
-    if var_type == "binary":
-        ax.plot(gens, med_s, color="#9467bd", lw=2.2, label=r"Median Logit $z$ (Left Axis)")
-        ax.set_ylabel(r"Logit Value $z$ (Log-odds scale)", color="#9467bd", fontweight="bold", fontsize=11)
-        ax.tick_params(axis="y", labelcolor="#9467bd", labelsize=10)
-        ax.spines["left"].set_color("#9467bd")
+    if var_type in ("binary", "categorical"):
+        color = "#9467bd" if var_type == "binary" else "#e377c2"
+        ax.plot(gens, med_s, color=color, lw=2.2, label=r"Median Logit $z$ (Left Axis)")
+        ax.set_ylabel(r"Logit Value $z$ (Log-odds scale)", color=color, fontweight="bold", fontsize=11)
+        ax.tick_params(axis="y", labelcolor=color, labelsize=10)
+        ax.spines["left"].set_color(color)
         ax.spines["left"].set_linewidth(1.8)
 
-        p_flips = 1.0 / (1.0 + np.exp(-med_s))
+        p_mut = 1.0 / (1.0 + np.exp(-med_s))
         ax_twin = ax.twinx()
-        ax_twin.plot(gens, p_flips, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{flip}} = \sigma(z)$ (Right Axis)")
-        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{flip}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
+        ax_twin.plot(gens, p_mut, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{mut}} = \sigma(z)$ (Right Axis)")
+        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{mut}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
         ax_twin.tick_params(axis="y", labelcolor="#8c564b", labelsize=10)
         ax_twin.spines["right"].set_color("#8c564b")
         ax_twin.spines["right"].set_linewidth(1.8)
         ax_twin.grid(False)
-    elif var_type == "categorical":
-        ax.plot(gens, med_s, color="#e377c2", lw=2.0, label="Normalized Softmax Entropy")
-        ax.set_ylabel("Entropy [0, 1]")
-        ax.set_ylim(-0.05, 1.05)
     else:
         q25_s = np.percentile(strat_arr, 25, axis=0)
         ax.plot(gens, med_s, color="#2ca02c", lw=2.0, label=f"Median {param_name}")
@@ -183,26 +180,22 @@ def plot_dts_3panel(
     q75_s = np.percentile(strat_arr, 75, axis=0)
 
     ax_twin = None
-    if var_type == "binary":
-        # In binary, display logit z on left axis and implied flip probability on right axis
-        axes[1].plot(gens, med_s, color="#9467bd", lw=2.2, label=r"Median Logit $z$ (Left Axis)")
-        axes[1].set_ylabel(r"Logit Value $z$ (Log-odds scale)", color="#9467bd", fontweight="bold", fontsize=11)
-        axes[1].tick_params(axis="y", labelcolor="#9467bd", labelsize=10)
-        axes[1].spines["left"].set_color("#9467bd")
+    if var_type in ("binary", "categorical"):
+        color = "#9467bd" if var_type == "binary" else "#e377c2"
+        axes[1].plot(gens, med_s, color=color, lw=2.2, label=r"Median Logit $z$ (Left Axis)")
+        axes[1].set_ylabel(r"Logit Value $z$ (Log-odds scale)", color=color, fontweight="bold", fontsize=11)
+        axes[1].tick_params(axis="y", labelcolor=color, labelsize=10)
+        axes[1].spines["left"].set_color(color)
         axes[1].spines["left"].set_linewidth(1.8)
 
-        p_flips = 1.0 / (1.0 + np.exp(-med_s))
+        p_mut = 1.0 / (1.0 + np.exp(-med_s))
         ax_twin = axes[1].twinx()
-        ax_twin.plot(gens, p_flips, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{flip}} = \sigma(z)$ (Right Axis)")
-        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{flip}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
+        ax_twin.plot(gens, p_mut, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{mut}} = \sigma(z)$ (Right Axis)")
+        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{mut}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
         ax_twin.tick_params(axis="y", labelcolor="#8c564b", labelsize=10)
         ax_twin.spines["right"].set_color("#8c564b")
         ax_twin.spines["right"].set_linewidth(1.8)
         ax_twin.grid(False)
-    elif var_type == "categorical":
-        axes[1].plot(gens, med_s, color="#e377c2", lw=2.0, label="Normalized Softmax Entropy")
-        axes[1].set_ylabel("Entropy [0, 1]")
-        axes[1].set_ylim(-0.05, 1.05)
     else:
         axes[1].plot(gens, med_s, color="#2ca02c", lw=2.0, label=f"Median {param_name}")
         axes[1].fill_between(gens, np.maximum(1e-10, q25_s), q75_s, color="#2ca02c", alpha=0.25, label="IQR (25-75%)")
@@ -218,23 +211,15 @@ def plot_dts_3panel(
         lines_2, labels_2 = ax_twin.get_legend_handles_labels()
         axes[1].legend(lines_1 + lines_2, labels_1 + labels_2, loc="lower left", framealpha=0.9)
     else:
-        axes[1].legend(loc="upper right" if var_type != "binary" else "lower left")
+        axes[1].legend(loc="upper right" if var_type not in ("binary", "categorical") else "lower left")
     axes[1].grid(True, which="both", ls="--", alpha=0.5)
 
-    # --- PANEL 3: Invariant Violations / Gauge Residual ---
-    if var_type == "categorical":
-        max_gauge = np.max(inv_arr, axis=0)
-        axes[2].plot(gens, max_gauge, color="#2ca02c", lw=1.8, label=r"Max $|\sum z_c|$")
-        axes[2].set_yscale("log")
-        axes[2].set_title(f"{title}: Zero-Mean Gauge Residual", fontsize=12, fontweight="bold")
-        axes[2].set_ylabel("Residual Error (Log Scale)")
-        axes[2].set_ylim(1e-16, 1e-10)
-    else:
-        tot_inv = np.sum(inv_arr, axis=0)
-        axes[2].plot(gens, tot_inv, color="#d62728", lw=1.8, label="Bounds Violations")
-        axes[2].set_title(f"{title}: Domain Invariant Check", fontsize=12, fontweight="bold")
-        axes[2].set_ylabel("Violation Count (Strictly 0)")
-        axes[2].set_ylim(-0.5, 5)
+    # --- PANEL 3: Invariant Violations ---
+    tot_inv = np.sum(inv_arr, axis=0)
+    axes[2].plot(gens, tot_inv, color="#d62728", lw=1.8, label="Domain Violations")
+    axes[2].set_title(f"{title}: Domain Invariant Check", fontsize=12, fontweight="bold")
+    axes[2].set_ylabel("Violation Count (Strictly 0)")
+    axes[2].set_ylim(-0.5, 5)
 
     axes[2].set_xlabel("Generation")
     axes[2].legend(loc="upper right")
@@ -262,7 +247,7 @@ def plot_dts_unified_grid(
         (0, 0, "real", "#2ca02c", r"Real: $\sigma_{\mathrm{real}}$ (Log-normal)", r"Step Size $\sigma$", True),
         (0, 1, "count", "#ff7f0e", r"Count: $\lambda_{\mathrm{count}}$ (Skellam)", r"Rate Parameter $\lambda$", True),
         (0, 2, "binary", "#9467bd", r"Binary: Logit $z$ (Logit-normal)", "Logit $z$", False),
-        (1, 0, "categorical", "#e377c2", r"Categorical: Softmax Entropy (Gauge)", "Entropy $H$", False),
+        (1, 0, "categorical", "#e377c2", r"Categorical: Logit $z$ (Logit-normal)", "Logit $z$", False),
         (1, 1, "fuzzy", "#17becf", r"Fuzzy: $\sigma_{\mathrm{fuzzy}}$ (Center/Disp)", r"Step Size $\sigma$", True),
         (1, 2, "circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular)", r"Rate Parameter $\lambda$", True),
     ]
@@ -306,7 +291,7 @@ def plot_dts_individual_summaries(
         ("real", "#2ca02c", r"Real ($\mathbb{R}$): $\sigma_{\mathrm{real}}$ (Log-normal)", r"Step Size $\sigma$", True),
         ("count", "#ff7f0e", r"Count ($\mathbb{N}_0$): $\lambda_{\mathrm{count}}$ (Skellam)", r"Rate Parameter $\lambda$", True),
         ("binary", "#9467bd", r"Binary ({0, 1}): Logit $z$ (Logit-normal)", "Logit $z$", False),
-        ("categorical", "#e377c2", r"Categorical: Softmax Entropy (Gauge Invariant)", "Entropy $H$", False),
+        ("categorical", "#e377c2", r"Categorical: Logit $z$ (Logit-normal)", "Logit $z$", False),
         ("fuzzy", "#17becf", r"Fuzzy: $\sigma_{\mathrm{fuzzy}}$ (Center/Dispersion)", r"Step Size $\sigma$", True),
         ("circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular Step)", r"Rate Parameter $\lambda$", True),
     ]

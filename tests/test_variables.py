@@ -189,53 +189,51 @@ class TestVariables(unittest.TestCase):
     def test_categorical_variable_lifecycle(self) -> None:
         var = CategoricalVariable.random(self.config, self.rng)
         self.assertEqual(var.dim, 2)
-        self.assertEqual(var.strategy_dim, 7)  # 3 + 4
+        self.assertEqual(var.strategy_dim, 2)  # 1 logit per categorical variable
         self.assertEqual(var.adaptation_type, "logit")
+        self.assertTrue(np.all(var.strategy <= 0.0))
+        self.assertTrue(np.all(var.strategy >= -4.6))
 
         # Copy
         copied = var.copy()
         self.assertIsNot(var.values, copied.values)
+        self.assertIsNot(var.strategy, copied.strategy)
 
-        # Adapt strategy with zero-mean centering hook
+        # Adapt strategy with logit noise and bounding
         var.adapt_strategy(self.rng, tau_prime=0.1, tau=0.1)
-        slice1 = var.strategy[:3]
-        slice2 = var.strategy[3:]
-        self.assertAlmostEqual(float(np.mean(slice1)), 0.0, places=6)
-        self.assertAlmostEqual(float(np.mean(slice2)), 0.0, places=6)
+        self.assertTrue(np.all(var.strategy <= 0.0))
+        self.assertTrue(np.all(var.strategy >= -4.6))
 
         # Mutate
         var.mutate(self.rng)
         self.assertTrue(0 <= var.values[0] < 3)
         self.assertTrue(0 <= var.values[1] < 4)
 
-    def test_categorical_standalone_centering_and_empty(self) -> None:
-        k = np.array([2, 3], dtype=np.int64)
-        logits = np.array([1.0, 3.0, 2.0, 4.0, 6.0], dtype=np.float64)
-        centered = center_categorical_logits(logits, k)
-        self.assertAlmostEqual(float(np.mean(centered[:2])), 0.0, places=6)
-        self.assertAlmostEqual(float(np.mean(centered[2:])), 0.0, places=6)
+    def test_categorical_jump_mutation_transitions(self) -> None:
+        """Verify that when mutating, categorical variables jump to distinct valid states."""
+        k = np.array([4], dtype=np.int64)
+        vals = np.array([0], dtype=np.int64)
+        # Force high mutation logit (p_mut ~ 0.5)
+        strat = np.array([0.0], dtype=np.float64)
+        var = CategoricalVariable(values=vals, strategy=strat, categorical_k=k)
 
+        mutated_states = set()
+        for _ in range(50):
+            v_copy = var.copy()
+            v_copy.mutate(self.rng)
+            mutated_states.add(int(v_copy.values[0]))
+
+        # With p=0.5 over 50 trials, all 4 categories [0, 1, 2, 3] should be explored
+        self.assertTrue(all(0 <= s < 4 for s in mutated_states))
+        self.assertGreater(len(mutated_states), 1)
+
+    def test_categorical_standalone_centering_and_empty(self) -> None:
         empty_cfg = ESConfig(n_categorical=0, categorical_k=[])
         empty_var = CategoricalVariable.random(empty_cfg, self.rng)
         self.assertEqual(empty_var.dim, 0)
+        self.assertEqual(empty_var.strategy_dim, 0)
         empty_var.adapt_strategy(self.rng, 0.1, 0.1)
         self.assertEqual(empty_var.values.shape[0], 0)
-
-    def test_categorical_gauge_centering_prevents_translation_drift(self) -> None:
-        """Verify that zero-mean centering projects arbitrary translation drifts to zero-mean without altering Softmax."""
-        k = np.array([4], dtype=np.int64)
-        logits = np.array([1.5, 0.5, -0.5, -1.5], dtype=np.float64)
-        probs_original = kernels.softmax(logits)
-
-        # Inject huge constant drift (gauge freedom: +500 along null vector)
-        drifted = logits + 500.0
-        # Centering removes the +500 drift
-        centered = center_categorical_logits(drifted, k)
-        self.assertAlmostEqual(float(np.mean(centered)), 0.0, places=10)
-        np.testing.assert_allclose(centered, logits, atol=1e-10)
-
-        probs_centered = kernels.softmax(centered)
-        np.testing.assert_allclose(probs_centered, probs_original, atol=1e-10)
 
     # -------------------------------------------------------------------------
     # 5. Circular Variable Tests

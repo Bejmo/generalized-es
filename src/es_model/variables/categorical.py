@@ -1,10 +1,16 @@
 """
-categorical.py: Categorical variable with softmax logit distributions.
+categorical.py: Categorical variable with self-adaptive mutation rates.
+
+Each categorical variable stores its current discrete integer state c_i in {0, ..., K_i - 1}.
+The co-evolving strategy parameter is a single real-valued logit z_i in [-4.6, 0.0] representing
+the mutation rate p_mut = sigmoid(z_i) in [0.01, 0.5].
+When mutation occurs, the variable jumps uniformly to one of the remaining (K_i - 1) categories:
+c_i' = (c_i + delta) mod K_i, with delta in {1, ..., K_i - 1}.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import NDArray
 
@@ -25,52 +31,33 @@ def center_categorical_logits(
     max_logit: float | None = None,
 ) -> NDArray[np.float64]:
     """
-    Center each categorical variable's logit slice around 0 to eliminate gauge freedom in softmax.
-    Optionally clips to [-max_logit, max_logit] to prevent probability saturation and genetic freezing.
+    Backwards-compatible passthrough utility.
+    Under the unified 1-logit-per-variable model, logits are clamped to [-4.6, 0.0] directly.
     """
-    if cat_logits.shape[0] == 0:
-        return cat_logits.copy()
-    centered = cat_logits.copy()
-    offset = 0
-    for k in categorical_k:
-        k_int = int(k)
-        slice_vals = centered[offset : offset + k_int]
-        c_vals = slice_vals - np.mean(slice_vals)
-        if max_logit is not None:
-            c_vals = np.clip(c_vals, -max_logit, max_logit)
-            c_vals -= np.mean(c_vals)
-            c_vals = np.clip(c_vals, -max_logit, max_logit)
-            c_vals -= np.mean(c_vals)
-        centered[offset : offset + k_int] = c_vals
-        offset += k_int
-    return centered
+    if max_logit is not None:
+        return np.clip(cat_logits, -4.6, max_logit)
+    return cat_logits.copy()
 
 
 def mutate_categorical(
     values: NDArray[np.int64],
-    cat_logits: NDArray[np.float64],
+    logits: NDArray[np.float64],
     rng: np.random.Generator,
     categorical_k: NDArray[np.int64],
 ) -> NDArray[np.int64]:
     """
-    Categorical mutation using per-variable softmax logit vectors.
+    Categorical jump mutation governed by sigmoid-mapped probabilities.
 
-    Each categorical variable has a logit vector of size C (its cardinality).
-    The genotype consists of C independent real values that evolve via
-    self-adaptive Gaussian perturbation. The phenotype (selected category)
-    is obtained by applying softmax over the logit vector to produce a
-    probability distribution, then sampling from it.
-
-    This guarantees a valid probability distribution (sum = 1) and preserves
-    evolutionary inertia through stochastic sampling.
+    Each variable mutates with probability p = sigmoid(logit) in [0.01, 0.5].
+    When mutating, it transitions uniformly to any of the remaining (K_i - 1) states:
+        c_i' = (c_i + delta) mod K_i,  delta in {1, ..., K_i - 1}
 
     Parameters
     ----------
     values : ndarray of int64
-        Current categorical indices (one per variable).
-    cat_logits : ndarray of float64
-        Flattened logit vectors, shape (sum(categorical_k),).
-        Sliced per variable using categorical_k.
+        Current categorical state indices (one per variable).
+    logits : ndarray of float64
+        Adapted logit parameters for mutation probability (shape: (n_categorical,)).
     rng : numpy Generator
     categorical_k : ndarray of int64
         Number of categories per categorical variable.
@@ -80,36 +67,31 @@ def mutate_categorical(
     ndarray of int64
         Mutated categorical indices.
     """
-    if values.shape[0] == 0:
+    n = values.shape[0]
+    if n == 0:
         return values.copy()
 
-    mutated = values.copy()
-    offset = 0
-    for i, k in enumerate(categorical_k):
-        k_int = int(k)
-        logit_slice = cat_logits[offset : offset + k_int]
-        probs = kernels.softmax(logit_slice)
-        r = float(rng.random())
-        acc = 0.0
-        choice = k_int - 1
-        for idx in range(k_int):
-            acc += probs[idx]
-            if r < acc:
-                choice = idx
-                break
-        mutated[i] = choice
-        offset += k_int
+    probs: NDArray[np.float64] = kernels.sigmoid(logits)
+    mut_mask: NDArray[np.bool_] = rng.random(n) < probs
+    mutated: NDArray[np.int64] = values.copy()
+
+    for i in range(n):
+        if mut_mask[i]:
+            k = int(categorical_k[i])
+            if k > 1:
+                offset = int(rng.integers(1, k))
+                mutated[i] = (mutated[i] + offset) % k
 
     return mutated
 
 
 class CategoricalVariable(Variable):
     """
-    Categorical variable with per-variable softmax logit distributions.
+    Categorical decision variable representing discrete unordered choices in {0, ..., K_i - 1}.
 
-    Each categorical variable has cardinality k_i.
-    The strategy vector stores concatenated logits of length sum(k_i).
-    Mutation evaluates softmax over each variable's logit slice and samples a category.
+    Mutation uses independent categorical transitions governed by sigmoid-mapped probabilities.
+    Strategy parameters represent unconstrained logits evolving via additive Gaussian noise,
+    clamped to [-4.6, 0.0] to prevent freezing and hypermutation.
     """
 
     def __init__(
@@ -117,7 +99,8 @@ class CategoricalVariable(Variable):
         values: NDArray[np.int64],
         strategy: NDArray[np.float64],
         categorical_k: NDArray[np.int64],
-        max_logit_categorical: float = 4.8,
+        max_logit_categorical: float = 0.0,
+        min_logit_categorical: float = -4.6,
     ) -> None:
         super().__init__(
             name="categorical",
@@ -126,9 +109,11 @@ class CategoricalVariable(Variable):
             strategy_recomb="arithmetic",
             adaptation_type="logit",
             max_logit=max_logit_categorical,
+            min_logit=min_logit_categorical,
         )
         self.categorical_k: NDArray[np.int64] = np.asarray(categorical_k, dtype=np.int64)
         self.max_logit_categorical: float = max_logit_categorical
+        self.min_logit_categorical: float = min_logit_categorical
 
     @classmethod
     def random(cls, config: ESConfig, rng: np.random.Generator) -> CategoricalVariable:
@@ -138,13 +123,15 @@ class CategoricalVariable(Variable):
             if config.n_categorical > 0
             else np.zeros(0, dtype=np.int64)
         )
-        strategy = np.full(config.total_cat_logits, config.init_logit_cat, dtype=np.float64)
-        max_logit = getattr(config, "max_logit_categorical", 4.8)
+        strategy = np.full(config.n_categorical, config.init_logit_cat, dtype=np.float64)
+        max_logit = getattr(config, "max_logit_categorical", 0.0)
+        min_logit = getattr(config, "min_logit_categorical", -4.6)
         return cls(
             values=values,
             strategy=strategy,
             categorical_k=config.categorical_k,
             max_logit_categorical=max_logit,
+            min_logit_categorical=min_logit,
         )
 
     def copy(self) -> CategoricalVariable:
@@ -154,23 +141,11 @@ class CategoricalVariable(Variable):
             strategy=self.strategy.copy(),
             categorical_k=self.categorical_k.copy(),
             max_logit_categorical=self.max_logit_categorical,
-        )
-
-    def _post_adapt_strategy(
-        self,
-        rng: np.random.Generator,
-        tau_prime: float,
-        tau: float,
-    ) -> None:
-        """Center logits around zero and enforce max_logit bound to prevent freezing."""
-        self.strategy = center_categorical_logits(
-            self.strategy,
-            self.categorical_k,
-            max_logit=self.max_logit_categorical,
+            min_logit_categorical=self.min_logit_categorical,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:
-        """Apply softmax sampling per categorical variable slice."""
+        """Apply jump mutation according to sigmoid-mapped probabilities."""
         self.values = mutate_categorical(
             self.values,
             self.strategy,

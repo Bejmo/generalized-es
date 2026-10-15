@@ -37,6 +37,7 @@ from experiments.utils.invariant_monitors import (
     check_real_bounds,
     check_count_bounds,
     check_binary_validity,
+    check_categorical_validity,
     check_gauge_residual,
     compute_softmax_entropy,
     check_fuzzy_monotonicity,
@@ -153,9 +154,8 @@ def run_dts_experiment(
                 strat_trace.append(float(np.median(best_p.logit_binary)))
                 inv_trace.append(check_binary_validity(best_p))
             elif var_type == "categorical":
-                strat_trace.append(float(np.mean(compute_softmax_entropy(best_p, cfg))))
-                gauge_res = check_gauge_residual(best_p, cfg)
-                inv_trace.append(float(np.max(np.abs(gauge_res))) if len(gauge_res) > 0 else 0.0)
+                strat_trace.append(float(np.median(best_p.logit_cat)))
+                inv_trace.append(check_categorical_validity(best_p, cfg))
             elif var_type == "fuzzy":
                 strat_trace.append(float(np.median(best_p.sigma_fuzzy)))
                 inv_trace.append(check_fuzzy_monotonicity(best_p, cfg))
@@ -231,11 +231,8 @@ def compute_dts_summary_metrics(results_list: List[Dict[str, Any]], g_shift: int
         slope_c = (np.log10(max(1e-12, fit_c_start)) - np.log10(max(1e-12, fit_c_end))) / (n_gens - g_shift)
         speed_ratio = slope_c / max(1e-6, slope_a)
 
-        # 4. Invariant violations count (gauge residual threshold for categorical, discrete count otherwise)
-        if vtype == "categorical":
-            tot_violations = int(np.sum(inv_arr > 1e-10))
-        else:
-            tot_violations = int(np.sum(inv_arr > 0))
+        # 4. Invariant violations count (all monitors record discrete violation counts >= 0)
+        tot_violations = int(np.sum(inv_arr > 0))
 
         metrics.append({
             "Variable Type": label_map.get(vtype, vtype),
