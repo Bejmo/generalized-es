@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 
 # Ensure project root is in sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "src").is_dir())
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -162,23 +162,14 @@ def main() -> None:
                 "per_seed": {str(s): seed_map[s] for s in SEEDS},
             }
 
-    # Save to local worktree
-    out_dir = PROJECT_ROOT / "experiments" / "ablation_progress"
+    # Save to results directory
+    out_dir = Path(__file__).resolve().parent.parent / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "factorial_ablation_results.json"
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(structured_results, f, indent=2)
     print(f"\n[OK] Results successfully saved to: {out_path}")
-
-    # Also copy to main repo if available
-    main_repo_path = Path(r"c:\Users\bejmo\Documents\documents\GitHub\TFG\experiments\ablation_progress\factorial_ablation_results.json")
-    try:
-        main_repo_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(out_path, main_repo_path)
-        print(f"[OK] Results successfully copied to main repo: {main_repo_path}")
-    except Exception as e:
-        print(f"[WARNING] Could not copy to main repo: {e}")
 
     # Summary table output
     elapsed = time.time() - t_start
