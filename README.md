@@ -127,6 +127,14 @@ Execute the test suite with `pytest`:
 uv run pytest
 ```
 
+### Statistical Hypothesis Testing
+
+Execute the paired two-sided Wilcoxon signed-rank tests with Holm-Bonferroni correction ($\alpha = 0.05$) across Experiments 1 and 3:
+
+```bash
+uv run statistical-tests
+```
+
 ---
 
 ## Architecture & Technical Documentation
