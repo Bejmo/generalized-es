@@ -16,20 +16,23 @@ The framework natively co-evolves 6 decision variable domains alongside their re
 
 | Variable Type | Domain | Strategy Parameter | Mutation Operator | Mathematical Dynamics |
 | :--- | :--- | :--- | :--- | :--- |
-| **Real ($\mathbb{R}$)** | $\mathbb{R}^{N_{\text{real}}}$ | $\sigma_{\text{real}} \in \mathbb{R}_{>0}^{N_{\text{real}}}$ | Gaussian | Specular reflection: $x' = \text{reflect}(x + \sigma \cdot \mathcal{N}(0,1), [L, U])$ |
-| **Count ($\mathbb{Z}$)** | $\mathbb{Z}_{\ge 0}^{N_{\text{count}}}$ | $\lambda_{\text{count}} \in \mathbb{R}_{>0}^{N_{\text{count}}}$ | Symmetric Skellam | Difference of Poissons: $x' = \text{clip}(x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda), [L, U])$ |
-| **Binary ($\mathbb{B}$)** | $\mathbb{B}^{N_{\text{binary}}}$ | $\text{logit}_{\text{binary}} \in \mathbb{R}^{N_{\text{binary}}}$ | Bit-Flip (XOR) | Guided by Bernoulli($p$), where $p = \sigma(\text{logit}) \in (0, 1)$ |
-| **Categorical ($\mathbb{C}$)** | $\mathbb{C}^{N_{\text{cat}}}$ | $\mathbf{z}_{\text{cat}} \in \mathbb{R}^{\sum C_k}$ | Softmax Resampling | Sample from categorical distribution $p_k = \text{softmax}(\mathbf{z}_k)$ |
-| **Fuzzy ($\mathbb{F}$)** | $\mathbb{F}^{3 \cdot N_{\text{fuzzy}}}$ | $\sigma_{\text{fuzzy}} \in \mathbb{R}_{>0}^{3 \cdot N_{\text{fuzzy}}}$ | Gaussian Mirror | Perturb triplets $(a, b, c)$, reflect on $[0, 1]$, enforce $a \le b \le c$ ($\epsilon=10^{-4}$) |
-| **Circular ($\mathbb{O}$)** | $\mathbb{O}^{N_{\text{circ}}}$ | $\lambda_{\text{circ}} \in \mathbb{R}_{>0}^{N_{\text{circ}}}$ | Modular Skellam | Ring offset: $x' = (x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda)) \pmod k$ |
+| **Real ($\mathbb{R}$)** | $`\mathbb{R}^{N_\text{real}}`$ | $`\boldsymbol{\sigma}_\text{real} \in \mathbb{R}_{>0}^{N_\text{real}}`$ | Gaussian | Specular reflection: $`x' = \text{reflect}(x + \sigma \cdot \mathcal{N}(0,1), [L, U])`$ |
+| **Count ($\mathbb{Z}$)** | $`\mathbb{Z}_{\ge 0}^{N_\text{count}}`$ | $`\boldsymbol{\lambda}_\text{count} \in \mathbb{R}_{>0}^{N_\text{count}}`$ | Symmetric Skellam | Difference of Poissons: $`x' = \text{clip}(x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda), [L, U])`$ |
+| **Binary ($\mathbb{B}$)** | $`\{0, 1\}^{N_\text{binary}}`$ | $`\mathbf{z}_\text{bin} \in \mathbb{R}^{N_\text{binary}}`$ | Bit-Flip (XOR) | Guided by Bernoulli($`p`$), where $`p = \sigma(z) \in (0, 1)`$ |
+| **Categorical ($\mathbb{C}$)** | $`\prod_k \{0, \dots, K_k - 1\}`$ | $`\mathbf{z}_\text{cat} \in \mathbb{R}^{\sum K_k}`$ | Softmax Resampling | Sample from categorical distribution: $`p_k = \text{softmax}(\mathbf{z}_k)`$ |
+| **Fuzzy ($\mathbb{F}$)** | $`([0, 1] \times [\epsilon, d_\max])^{N_\text{fuzzy}}`$ | $`\boldsymbol{\sigma}_\text{fuzzy} \in \mathbb{R}_{>0}^{2 \cdot N_\text{fuzzy}}`$ | Dual Gaussian Reflection | Perturb $`(m, d)`$: reflect $`m' \in [0, 1]`$, reflect & clamp $`d' \in [\epsilon, d_\max]`$ |
+| **Circular ($\mathbb{O}$)** | $`\prod_k \mathbb{Z}_{K_k}`$ | $`\boldsymbol{\lambda}_\text{circ} \in \mathbb{R}_{>0}^{N_\text{circ}}`$ | Modular Skellam | Ring offset: $`x' = (x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda)) \pmod{K_k}`$ |
+
+> [!NOTE]
+> **Fuzzy Variable Parameterization:** Each triangular fuzzy variable is parameterized by a contiguous pair $`(m, d)`$ denoting modal center $`m \in [0, 1]`$ and dispersion half-width $`d \in [\epsilon, d_\max]`$, inducing triangular membership $`\mu(x) = \max\left(0, 1 - \frac{|x-m|}{d}\right)`$. Phenotypically, it decodes to control points $`a = \max(0, m - d)`$, $`b = m`$, and $`c = \min(1, m + d)`$. Pair-wise discrete recombination is applied atomically to preserve physical coupling between center and spread.
 
 ### Self-Adaptation Dynamics
 
 - **Global & Coordinate Learning Rates:**
   $$\tau' = \frac{1}{\sqrt{2 \cdot N_{\text{total}}}}, \quad \tau = \frac{1}{\sqrt{2 \cdot \sqrt{N_{\text{total}}}}}$$
-- **Log-Normal Scale Adaptation** ($\sigma_{\text{real}}, \lambda_{\text{count}}, \sigma_{\text{fuzzy}}, \lambda_{\text{circ}}$):
+- **Log-Normal Scale Adaptation** ($`\boldsymbol{\sigma}_\text{real}, \boldsymbol{\lambda}_\text{count}, \boldsymbol{\sigma}_\text{fuzzy}, \boldsymbol{\lambda}_\text{circ}`$):
   $$\sigma_i' = \max\left(\sigma_{\text{floor}}, \, \sigma_i \cdot \exp\left(\tau' \cdot \mathcal{N}(0,1) + \tau \cdot \mathcal{N}_i(0,1)\right)\right), \quad \sigma_{\text{floor}} = 10^{-6}$$
-- **Logit-Normal Probability Adaptation** ($\text{logit}_{\text{binary}}, \mathbf{z}_{\text{cat}}$):
+- **Logit-Normal Probability Adaptation** ($`\mathbf{z}_\text{bin}, \mathbf{z}_\text{cat}`$):
   $$\mathbf{z}_i' = \mathbf{z}_i + \tau \cdot \mathcal{N}_i(0, \mathbf{I})$$
 
 ---

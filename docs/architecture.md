@@ -49,7 +49,7 @@ flowchart TD
     Ind --> CV["CountVariable<br/>• values: int64[N_count]<br/>• strategy: lambda_count[N_count]<br/>• bounds: [lower, upper]"]
     Ind --> BV["BinaryVariable<br/>• values: uint8[N_binary]<br/>• strategy: logit_binary[N_binary]<br/>• bounds: [0, 1]"]
     Ind --> CatV["CategoricalVariable<br/>• values: int64[N_cat]<br/>• strategy: logit_cat[sum(K)]<br/>• cardinalities: K"]
-    Ind --> FV["FuzzyVariable<br/>• values: float64[3 * N_fuzzy]<br/>• strategy: sigma_fuzzy[3 * N_fuzzy]<br/>• margin: epsilon"]
+    Ind --> FV["FuzzyVariable<br/>• values: float64[2 * N_fuzzy] (center m, dispersion d)<br/>• strategy: sigma_fuzzy[2 * N_fuzzy]<br/>• bounds: [0, 1] x [epsilon, d_max]"]
     Ind --> CircV["CircularVariable<br/>• values: int64[N_circ]<br/>• strategy: lambda_circ[N_circ]<br/>• cardinalities: K"]
 
     Ind --> Genome["genome property<br/>Canonical flattened 1-D vector: [real, count, binary, categorical, fuzzy, circular]"]
@@ -112,7 +112,7 @@ TFG/
 │   │       ├── count.py                                    #       CountVariable (Skellam mutation with clipping)
 │   │       ├── binary.py                                   #       BinaryVariable (Bit-flip mutation via sigmoid)
 │   │       ├── categorical.py                              #       CategoricalVariable (Softmax resample)
-│   │       ├── fuzzy.py                                    #       FuzzyVariable (Gaussian mirror with order preservation)
+│   │       ├── fuzzy.py                                    #       FuzzyVariable (Center-dispersion parameterization with reflection)
 │   │       └── circular.py                                 #       CircularVariable (Modular Skellam ring mutation)
 │   ├── benchmarks/                                         #   Objective Benchmark Landscapes
 │   │   ├── functions.py                                    #     Standard continuous landscapes (Sphere, Rastrigin, Ackley)
