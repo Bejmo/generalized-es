@@ -66,6 +66,8 @@ class ESConfig:
     max_logit_binary: float = 0.0  # Maximum logit for binary flips (p_flip <= 0.5)
     min_logit_binary: float = -4.6 # Minimum logit for binary flips (p_flip >= 0.01 / 1%)
     max_logit_categorical: float = 4.8 # Maximum logit for categorical classes (P_target <= 0.99 / 99%)
+    strategy_recomb_scale: str = "geometric"  # "geometric" | "arithmetic" for scale parameters
+    circular_mutation_operator: str = "skellam"  # "skellam" | "forced_step"
 
     # -----------------------------------------------------------------------------
     # 5. Initial Strategy Parameter Defaults

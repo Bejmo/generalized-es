@@ -287,6 +287,47 @@ class TestVariables(unittest.TestCase):
         dist_sq = var.distance_squared(target)
         self.assertEqual(dist_sq, 4.0)
 
+    def test_circular_forced_step_operator(self) -> None:
+        """Verify that forced-step circular mutation always alters values by +-1 mod K, never 0."""
+        cfg = ESConfig(n_circular=2, circular_k=np.array([7, 12], dtype=np.int64), circular_mutation_operator="forced_step")
+        var = CircularVariable.random(cfg, self.rng)
+        self.assertEqual(var.mutation_operator, "forced_step")
+
+        init_vals = var.values.copy()
+        for _ in range(50):
+            var.mutate(self.rng)
+            diff0 = (var.values[0] - init_vals[0]) % 7
+            self.assertIn(diff0, [1, 6])  # +1 or -1 mod 7
+            diff1 = (var.values[1] - init_vals[1]) % 12
+            self.assertIn(diff1, [1, 11])  # +1 or -1 mod 12
+            init_vals = var.values.copy()
+
+    def test_strategy_recomb_scale_arithmetic(self) -> None:
+        """Verify that strategy_recomb_scale='arithmetic' configures scale variables properly."""
+        cfg = ESConfig(
+            n_real=2,
+            n_count=2,
+            n_fuzzy=1,
+            n_circular=2,
+            circular_k=np.array([5, 5], dtype=np.int64),
+            strategy_recomb_scale="arithmetic",
+        )
+        real_var = RealVariable.random(cfg, self.rng)
+        count_var = CountVariable.random(cfg, self.rng)
+        fuzzy_var = FuzzyVariable.random(cfg, self.rng)
+        circ_var = CircularVariable.random(cfg, self.rng)
+
+        self.assertEqual(real_var.strategy_recomb, "arithmetic")
+        self.assertEqual(count_var.strategy_recomb, "arithmetic")
+        self.assertEqual(fuzzy_var.strategy_recomb, "arithmetic")
+        self.assertEqual(circ_var.strategy_recomb, "arithmetic")
+
+        # Verify copies retain arithmetic
+        self.assertEqual(real_var.copy().strategy_recomb, "arithmetic")
+        self.assertEqual(count_var.copy().strategy_recomb, "arithmetic")
+        self.assertEqual(fuzzy_var.copy().strategy_recomb, "arithmetic")
+        self.assertEqual(circ_var.copy().strategy_recomb, "arithmetic")
+
     # -------------------------------------------------------------------------
     # 6. Fuzzy Variable Tests
     # -------------------------------------------------------------------------

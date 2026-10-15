@@ -108,12 +108,13 @@ class FuzzyVariable(Variable):
         d_max: float = 1.0,
         sigma_ceiling: float = 0.5,
         sigma_floor: float = 1e-6,
+        strategy_recomb: str = "geometric",
     ) -> None:
         super().__init__(
             name="fuzzy",
             values=values,
             strategy=strategy,
-            strategy_recomb="geometric",
+            strategy_recomb=strategy_recomb,
             adaptation_type="lognormal",
             sigma_floor=sigma_floor,
             strategy_ceiling=sigma_ceiling,
@@ -162,6 +163,7 @@ class FuzzyVariable(Variable):
             d_max=d_max,
             sigma_ceiling=config.sigma_ceiling_fuzzy,
             sigma_floor=config.sigma_floor,
+            strategy_recomb=getattr(config, "strategy_recomb_scale", "geometric"),
         )
 
     def copy(self) -> FuzzyVariable:
@@ -174,6 +176,7 @@ class FuzzyVariable(Variable):
             d_max=self.d_max,
             sigma_ceiling=self.sigma_ceiling,
             sigma_floor=self.sigma_floor,
+            strategy_recomb=self.strategy_recomb,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:

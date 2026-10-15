@@ -10,7 +10,7 @@ from .count import CountVariable, mutate_count
 from .binary import BinaryVariable, mutate_binary
 from .categorical import CategoricalVariable, mutate_categorical, center_categorical_logits
 from .fuzzy import FuzzyVariable, mutate_fuzzy, membership
-from .circular import CircularVariable, mutate_circular
+from .circular import CircularVariable, mutate_circular, mutate_circular_forced_step
 
 VARIABLE_REGISTRY: dict[str, type[Variable]] = {
     "real": RealVariable,
@@ -39,4 +39,5 @@ __all__ = [
     "mutate_fuzzy",
     "membership",
     "mutate_circular",
+    "mutate_circular_forced_step",
 ]

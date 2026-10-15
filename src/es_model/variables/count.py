@@ -72,6 +72,7 @@ class CountVariable(Variable):
         bounds: Any,
         sigma_floor: float = 1e-6,
         lambda_ceiling: float | NDArray[np.float64] | None = None,
+        strategy_recomb: str = "geometric",
     ) -> None:
         resolved_bounds: NDArray[np.int64] = resolve_bounds(bounds, int(values.shape[0]), dtype=np.int64)
         if lambda_ceiling is not None:
@@ -85,7 +86,7 @@ class CountVariable(Variable):
             name="count",
             values=values,
             strategy=strategy,
-            strategy_recomb="geometric",
+            strategy_recomb=strategy_recomb,
             adaptation_type="lognormal",
             sigma_floor=sigma_floor,
             strategy_ceiling=ceiling,
@@ -115,6 +116,7 @@ class CountVariable(Variable):
             bounds=count_b,
             sigma_floor=getattr(config, "lambda_floor_count", 1e-2),
             lambda_ceiling=lambda_ceiling,
+            strategy_recomb=getattr(config, "strategy_recomb_scale", "geometric"),
         )
 
     def copy(self) -> CountVariable:
@@ -125,6 +127,7 @@ class CountVariable(Variable):
             bounds=self.bounds.copy(),
             sigma_floor=self.sigma_floor,
             lambda_ceiling=self.lambda_ceiling.copy() if self.lambda_ceiling is not None else None,
+            strategy_recomb=self.strategy_recomb,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:

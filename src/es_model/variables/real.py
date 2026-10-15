@@ -92,6 +92,7 @@ class RealVariable(Variable):
         bounds: Any,
         sigma_floor: float = 1e-6,
         sigma_ceiling: float | NDArray[np.float64] | None = None,
+        strategy_recomb: str = "geometric",
     ) -> None:
         resolved_bounds: NDArray[np.float64] = resolve_bounds(bounds, int(values.shape[0]), dtype=np.float64)
         if sigma_ceiling is not None:
@@ -105,7 +106,7 @@ class RealVariable(Variable):
             name="real",
             values=values,
             strategy=strategy,
-            strategy_recomb="geometric",
+            strategy_recomb=strategy_recomb,
             adaptation_type="lognormal",
             sigma_floor=sigma_floor,
             strategy_ceiling=ceiling,
@@ -139,6 +140,7 @@ class RealVariable(Variable):
             bounds=real_b,
             sigma_floor=config.sigma_floor,
             sigma_ceiling=sigma_ceiling,
+            strategy_recomb=getattr(config, "strategy_recomb_scale", "geometric"),
         )
 
     def copy(self) -> RealVariable:
@@ -149,6 +151,7 @@ class RealVariable(Variable):
             bounds=self.bounds.copy(),
             sigma_floor=self.sigma_floor,
             sigma_ceiling=self.sigma_ceiling.copy() if self.sigma_ceiling is not None else None,
+            strategy_recomb=self.strategy_recomb,
         )
 
     def mutate(self, rng: np.random.Generator) -> None:
