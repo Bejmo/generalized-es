@@ -14,11 +14,23 @@ from src.es_model.config import ESConfig
 
 def plot_heterogeneous_convergence(
     results: Dict[str, Dict[str, Any]],
-    max_evals: int,
-    config: ESConfig,
-    n_seeds: int,
+    max_evals: Optional[int] = None,
+    config: Optional[ESConfig] = None,
+    n_seeds: Optional[int] = None,
+    save_dir: Optional[str] = None,
     data_dir: Optional[str] = None,
+    show: bool = True,
 ) -> None:
+    target_dir = save_dir or data_dir
+    bench_names = list(results.keys())
+    if not bench_names:
+        return
+    if max_evals is None:
+        max_evals = len(results[bench_names[0]]["mean"])
+    if n_seeds is None:
+        traces = results[bench_names[0]].get("traces")
+        n_seeds = traces.shape[0] if traces is not None else 10
+    cfg_label = f" (μ={config.mu}, λ={config.lam})" if config else ""
     """
     Plot and save convergence curves across synthetic benchmarks:
     1. Standalone publication-grade figures per benchmark saved to data_dir.
@@ -38,7 +50,7 @@ def plot_heterogeneous_convergence(
         std_trace = res["std"]
         col = colors[i % len(colors)]
 
-        ax.plot(evals, mean_trace, color=col, lw=2.2, label=f"Generalized ES (μ={config.mu}, λ={config.lam})")
+        ax.plot(evals, mean_trace, color=col, lw=2.2, label=f"Generalized ES{cfg_label}")
         ax.fill_between(evals, np.maximum(1e-12, mean_trace - std_trace), mean_trace + std_trace, color=col, alpha=0.25, label="±1 Std Dev")
 
         ax.set_title(f"{bench_name}: Fitness Convergence ({n_seeds} Seeds)", fontsize=12, fontweight="bold")
@@ -49,14 +61,19 @@ def plot_heterogeneous_convergence(
         ax.legend(loc="upper right", frameon=True)
 
         plt.tight_layout()
-        if data_dir is not None:
-            os.makedirs(data_dir, exist_ok=True)
-            fig_path = os.path.join(data_dir, f"exp3_{bench_name.lower()}_convergence.png")
+        if target_dir is not None:
+            os.makedirs(target_dir, exist_ok=True)
+            fig_path = os.path.join(target_dir, f"exp3_{bench_name.lower()}_convergence.png")
             fig.savefig(fig_path, dpi=200, bbox_inches="tight")
             print(f"Saved separate convergence figure: {fig_path}")
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
 
     # 2. Interactive comparative overview in notebook
+    if not show:
+        return
     n_b = len(bench_names)
     fig, axes = plt.subplots(1, n_b, figsize=(6 * n_b, 5), sharey=False)
     if not isinstance(axes, (list, np.ndarray)):
@@ -68,7 +85,7 @@ def plot_heterogeneous_convergence(
         std_trace = res["std"]
         col = colors[i % len(colors)]
 
-        ax.plot(evals, mean_trace, color=col, lw=2.0, label=f"Generalized ES (μ={config.mu}, λ={config.lam})")
+        ax.plot(evals, mean_trace, color=col, lw=2.0, label=f"Generalized ES{cfg_label}")
         ax.fill_between(evals, np.maximum(1e-12, mean_trace - std_trace), mean_trace + std_trace, color=col, alpha=0.25, label="±1 Std Dev")
         ax.set_title(f"{bench_name}\n({n_seeds} Seeds)", fontsize=13, fontweight="bold")
         ax.set_xlabel("Function Evaluations", fontsize=11)
@@ -78,16 +95,27 @@ def plot_heterogeneous_convergence(
         ax.legend(loc="upper right", frameon=True)
 
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_heterogeneous_dynamics(
     bench_name: str,
     bench_agg: Dict[str, np.ndarray],
-    n_generations: int,
-    n_seeds: int,
+    n_generations: Optional[int] = None,
+    n_seeds: Optional[int] = None,
+    save_dir: Optional[str] = None,
     data_dir: Optional[str] = None,
+    show: bool = True,
 ) -> None:
+    target_dir = save_dir or data_dir
+    if n_generations is None:
+        first_arr = next(iter(bench_agg.values()))
+        n_generations = len(first_arr)
+    if n_seeds is None:
+        n_seeds = 10
     """
     Plot and save heterogeneous strategy dynamics and cost decompositions for a benchmark:
     1. Standalone Panel A: Mutation step sizes / intensities.
@@ -120,8 +148,8 @@ def plot_heterogeneous_dynamics(
         ("cost_circular", "Circular Cost", "#e377c2"),
     ]
 
-    if data_dir is not None:
-        os.makedirs(data_dir, exist_ok=True)
+    if target_dir is not None:
+        os.makedirs(target_dir, exist_ok=True)
 
     # 1. Standalone: Mutation Step Sizes & Rates (Log scale)
     fig_a, ax_a = plt.subplots(figsize=(7.5, 4.8))
@@ -138,10 +166,13 @@ def plot_heterogeneous_dynamics(
     ax_a.legend(loc="upper right", frameon=True, fontsize=10)
     plt.tight_layout()
     if data_dir is not None:
-        path_a = os.path.join(data_dir, f"exp3_{bench_name.lower()}_step_sizes.png")
+        path_a = os.path.join(target_dir, f"exp3_{bench_name.lower()}_step_sizes.png")
         fig_a.savefig(path_a, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_a}")
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig_a)
 
     # 2. Standalone: Probabilities & Certainty [0, 1]
     fig_b, ax_b = plt.subplots(figsize=(7.5, 4.8))
@@ -158,10 +189,13 @@ def plot_heterogeneous_dynamics(
     ax_b.legend(loc="center right", frameon=True, fontsize=10)
     plt.tight_layout()
     if data_dir is not None:
-        path_b = os.path.join(data_dir, f"exp3_{bench_name.lower()}_probabilities.png")
+        path_b = os.path.join(target_dir, f"exp3_{bench_name.lower()}_probabilities.png")
         fig_b.savefig(path_b, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_b}")
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig_b)
 
     # 3. Standalone: Fitness Error Decomposition per Variable Type
     fig_c, ax_c = plt.subplots(figsize=(7.5, 4.8))
@@ -177,10 +211,13 @@ def plot_heterogeneous_dynamics(
     ax_c.legend(loc="upper right", frameon=True, fontsize=9.5)
     plt.tight_layout()
     if data_dir is not None:
-        path_c = os.path.join(data_dir, f"exp3_{bench_name.lower()}_decomposition.png")
+        path_c = os.path.join(target_dir, f"exp3_{bench_name.lower()}_decomposition.png")
         fig_c.savefig(path_c, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_c}")
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig_c)
 
     # 4. Interactive 3-Panel Diagnostics Overview in notebook
     fig, axes = plt.subplots(1, 3, figsize=(19, 5.2))

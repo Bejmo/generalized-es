@@ -535,13 +535,14 @@ def run_study_2(results_dir: str, figures_dir: str) -> Dict:
 # =============================================================================
 
 def main() -> None:
-    results_dir = os.path.join(SCRIPT_DIR, "results")
-    figures_dir = os.path.join(SCRIPT_DIR, "figures")
-    os.makedirs(results_dir, exist_ok=True)
+    exp_dir = os.path.dirname(SCRIPT_DIR)
+    data_dir = os.path.join(exp_dir, "data")
+    figures_dir = os.path.join(exp_dir, "figures")
+    os.makedirs(data_dir, exist_ok=True)
     os.makedirs(figures_dir, exist_ok=True)
 
-    study1_data = run_study_1(results_dir, figures_dir)
-    study2_data = run_study_2(results_dir, figures_dir)
+    study1_data = run_study_1(data_dir, figures_dir)
+    study2_data = run_study_2(data_dir, figures_dir)
     print("\nAll extra categorical validation experiments successfully completed and saved.")
 
 

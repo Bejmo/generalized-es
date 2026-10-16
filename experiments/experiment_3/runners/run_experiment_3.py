@@ -93,7 +93,12 @@ def compute_wilcoxon_table_exp3(
         raw_p_list = []
 
         for opp_label, opp_final in opponents:
-            diff = prop_final - opp_final
+            n_cmp = min(len(prop_final), len(opp_final))
+            if n_cmp < 3:
+                continue
+            p_sub = prop_final[:n_cmp]
+            o_sub = opp_final[:n_cmp]
+            diff = p_sub - o_sub
             wins = int(np.sum(diff < 0))
             losses = int(np.sum(diff > 0))
             ties = int(np.sum(diff == 0))
@@ -102,7 +107,7 @@ def compute_wilcoxon_table_exp3(
                 w_stat, p_val = 0.0, 1.0
             else:
                 try:
-                    res = stats.wilcoxon(prop_final, opp_final, alternative="two-sided")
+                    res = stats.wilcoxon(p_sub, o_sub, alternative="two-sided")
                     w_stat = float(res.statistic)
                     p_val = float(res.pvalue)
                 except Exception:
@@ -168,8 +173,25 @@ def main():
         data_dir=data_dir,
     )
 
-    plot_heterogeneous_convergence(results=results, save_dir=fig_dir)
+    plot_heterogeneous_convergence(
+        results=results,
+        max_evals=args.max_evals,
+        config=config,
+        n_seeds=args.n_seeds,
+        save_dir=fig_dir,
+        show=False,
+    )
     print(f"Results and figures saved to {args.output_dir}")
+
+    # Print Wilcoxon tests if baselines exist
+    baseline_file = os.path.join(data_dir, "random_search_results.json")
+    traces_file = os.path.join(data_dir, "exp3_traces.npz")
+    if os.path.exists(baseline_file) and os.path.exists(traces_file):
+        print("\n--- Statistical Hypothesis Testing vs. External Baselines (Table 5.3) ---")
+        tests_exp3 = compute_wilcoxon_table_exp3(traces_file, baseline_file)
+        for bench_name, records in tests_exp3.items():
+            for r in records:
+                print(f"{bench_name:<24} | {r['opponent']:<18} | {r['wins']}/{r['ties']}/{r['losses']:<6} | W={r['w_stat']:<6.1f} | p_raw={r['raw_p']:<10.4e} | p_adj={r['adj_p']:<10.4e} | {r['decision']}")
 
 
 if __name__ == "__main__":
