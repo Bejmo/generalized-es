@@ -18,10 +18,13 @@ def plot_heterogeneous_convergence(
     config: Optional[ESConfig] = None,
     n_seeds: Optional[int] = None,
     save_dir: Optional[str] = None,
-    data_dir: Optional[str] = None,
     show: bool = True,
 ) -> None:
-    target_dir = save_dir or data_dir
+    """
+    Plot and save convergence curves across synthetic benchmarks:
+    1. Standalone publication-grade figures per benchmark saved to save_dir.
+    2. Side-by-side comparative overview across all benchmarks.
+    """
     bench_names = list(results.keys())
     if not bench_names:
         return
@@ -31,14 +34,9 @@ def plot_heterogeneous_convergence(
         traces = results[bench_names[0]].get("traces")
         n_seeds = traces.shape[0] if traces is not None else 10
     cfg_label = f" (μ={config.mu}, λ={config.lam})" if config else ""
-    """
-    Plot and save convergence curves across synthetic benchmarks:
-    1. Standalone publication-grade figures per benchmark saved to data_dir.
-    2. Side-by-side comparative overview across all benchmarks.
-    """
+
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
 
-    bench_names = list(results.keys())
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
     evals = np.arange(1, max_evals + 1)
 
@@ -61,9 +59,9 @@ def plot_heterogeneous_convergence(
         ax.legend(loc="upper right", frameon=True)
 
         plt.tight_layout()
-        if target_dir is not None:
-            os.makedirs(target_dir, exist_ok=True)
-            fig_path = os.path.join(target_dir, f"exp3_{bench_name.lower()}_convergence.png")
+        if save_dir is not None:
+            os.makedirs(save_dir, exist_ok=True)
+            fig_path = os.path.join(save_dir, f"exp3_{bench_name.lower()}_convergence.png")
             fig.savefig(fig_path, dpi=200, bbox_inches="tight")
             print(f"Saved separate convergence figure: {fig_path}")
         if show:
@@ -95,10 +93,7 @@ def plot_heterogeneous_convergence(
         ax.legend(loc="upper right", frameon=True)
 
     plt.tight_layout()
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
+    plt.show()
 
 
 def plot_heterogeneous_dynamics(
@@ -107,15 +102,8 @@ def plot_heterogeneous_dynamics(
     n_generations: Optional[int] = None,
     n_seeds: Optional[int] = None,
     save_dir: Optional[str] = None,
-    data_dir: Optional[str] = None,
     show: bool = True,
 ) -> None:
-    target_dir = save_dir or data_dir
-    if n_generations is None:
-        first_arr = next(iter(bench_agg.values()))
-        n_generations = len(first_arr)
-    if n_seeds is None:
-        n_seeds = 10
     """
     Plot and save heterogeneous strategy dynamics and cost decompositions for a benchmark:
     1. Standalone Panel A: Mutation step sizes / intensities.
@@ -123,6 +111,12 @@ def plot_heterogeneous_dynamics(
     3. Standalone Panel C: Partial fitness error decomposition across the 6 variable types.
     4. Composite 3-panel diagnostics figure.
     """
+    if n_generations is None:
+        first_arr = next(iter(bench_agg.values()))
+        n_generations = len(first_arr)
+    if n_seeds is None:
+        n_seeds = 10
+
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
     gens = np.arange(n_generations)
 
@@ -148,8 +142,8 @@ def plot_heterogeneous_dynamics(
         ("cost_circular", "Circular Cost", "#e377c2"),
     ]
 
-    if target_dir is not None:
-        os.makedirs(target_dir, exist_ok=True)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
 
     # 1. Standalone: Mutation Step Sizes & Rates (Log scale)
     fig_a, ax_a = plt.subplots(figsize=(7.5, 4.8))
@@ -165,8 +159,8 @@ def plot_heterogeneous_dynamics(
     ax_a.grid(True, which="both", ls="--", alpha=0.5)
     ax_a.legend(loc="upper right", frameon=True, fontsize=10)
     plt.tight_layout()
-    if data_dir is not None:
-        path_a = os.path.join(target_dir, f"exp3_{bench_name.lower()}_step_sizes.png")
+    if save_dir is not None:
+        path_a = os.path.join(save_dir, f"exp3_{bench_name.lower()}_step_sizes.png")
         fig_a.savefig(path_a, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_a}")
     if show:
@@ -188,8 +182,8 @@ def plot_heterogeneous_dynamics(
     ax_b.grid(True, which="both", ls="--", alpha=0.5)
     ax_b.legend(loc="center right", frameon=True, fontsize=10)
     plt.tight_layout()
-    if data_dir is not None:
-        path_b = os.path.join(target_dir, f"exp3_{bench_name.lower()}_probabilities.png")
+    if save_dir is not None:
+        path_b = os.path.join(save_dir, f"exp3_{bench_name.lower()}_probabilities.png")
         fig_b.savefig(path_b, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_b}")
     if show:
@@ -210,8 +204,8 @@ def plot_heterogeneous_dynamics(
     ax_c.grid(True, which="both", ls="--", alpha=0.5)
     ax_c.legend(loc="upper right", frameon=True, fontsize=9.5)
     plt.tight_layout()
-    if data_dir is not None:
-        path_c = os.path.join(target_dir, f"exp3_{bench_name.lower()}_decomposition.png")
+    if save_dir is not None:
+        path_c = os.path.join(save_dir, f"exp3_{bench_name.lower()}_decomposition.png")
         fig_c.savefig(path_c, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_c}")
     if show:
@@ -220,6 +214,8 @@ def plot_heterogeneous_dynamics(
         plt.close(fig_c)
 
     # 4. Interactive 3-Panel Diagnostics Overview in notebook
+    if not show:
+        return
     fig, axes = plt.subplots(1, 3, figsize=(19, 5.2))
     for key, lbl, col, ls in m_keys_1:
         axes[0].plot(gens, bench_agg[f"{key}_mean"], label=lbl, color=col, ls=ls, lw=2.0)

@@ -85,7 +85,7 @@ def main():
     print(f"Summary table saved to: {csv_path}")
 
     # Generate individual plots
-    plot_dts_individual_summaries(results, g_shift=args.g_shift, n_gens=args.n_gens, save_dir=fig_dir)
+    plot_dts_individual_summaries(results, g_shift=args.g_shift, save_dir=fig_dir, show=False)
     print(f"All figures saved to: {fig_dir}")
 
 

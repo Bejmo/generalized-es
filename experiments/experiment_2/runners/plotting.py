@@ -10,18 +10,18 @@ Generates consistent, publication-grade figures with Matplotlib for:
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import matplotlib.pyplot as plt
 
 from src.es_model.config import ESConfig
 
 
-
 def plot_dts_fitness(
     results: Dict[str, Any],
     title: str,
     save_path: Optional[str] = None,
+    show: bool = True,
 ) -> None:
     """
     Render standalone fitness convergence profile under DTS:
@@ -59,8 +59,12 @@ def plot_dts_fitness(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
-    plt.show()
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Saved figure: {save_path}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_dts_strategy(
@@ -68,6 +72,7 @@ def plot_dts_strategy(
     param_name: str,
     title: str,
     save_path: Optional[str] = None,
+    show: bool = True,
 ) -> None:
     """
     Render standalone adaptive strategy parameter profile under DTS:
@@ -127,8 +132,12 @@ def plot_dts_strategy(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
-    plt.show()
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Saved figure: {save_path}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_dts_3panel(
@@ -136,6 +145,7 @@ def plot_dts_3panel(
     param_name: str,
     title: str,
     save_path: Optional[str] = None,
+    show: bool = True,
 ) -> None:
     """
     Render standard 3-panel dynamic profile for a specific variable type under DTS:
@@ -228,14 +238,19 @@ def plot_dts_3panel(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
-    plt.show()
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Saved figure: {save_path}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_dts_unified_grid(
-    results_list: List[Dict[str, Any]],
+    results_list: Union[List[Dict[str, Any]], Dict[str, Any]],
     g_shift: int,
     save_path: Optional[str] = None,
+    show: bool = True,
 ) -> None:
     """
     Unified 6-panel summary grid (2x3) comparing strategy parameter dynamics
@@ -252,7 +267,10 @@ def plot_dts_unified_grid(
         (1, 2, "circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular)", r"Rate Parameter $\lambda$", True),
     ]
 
-    res_by_type = {r["var_type"]: r for r in results_list}
+    if isinstance(results_list, dict):
+        res_by_type = results_list
+    else:
+        res_by_type = {r["var_type"]: r for r in results_list}
 
     for row, col, vtype, color, title, ylabel, is_log in configs:
         ax = axes[row, col]
@@ -274,14 +292,19 @@ def plot_dts_unified_grid(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
-    plt.show()
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Saved figure: {save_path}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_dts_individual_summaries(
-    results_list: List[Dict[str, Any]],
+    results_list: Union[List[Dict[str, Any]], Dict[str, Any]],
     g_shift: int,
     save_dir: Optional[str] = None,
+    show: bool = True,
 ) -> None:
     """
     Generate and save separate standalone figures for each of the 6 variable representations
@@ -296,7 +319,11 @@ def plot_dts_individual_summaries(
         ("circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular Step)", r"Rate Parameter $\lambda$", True),
     ]
 
-    res_by_type = {r["var_type"]: r for r in results_list}
+    if isinstance(results_list, dict):
+        res_by_type = results_list
+    else:
+        res_by_type = {r["var_type"]: r for r in results_list}
+
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
 
@@ -327,9 +354,7 @@ def plot_dts_individual_summaries(
             fig_path = os.path.join(save_dir, f"dts_{vtype}_summary.png")
             fig.savefig(fig_path, dpi=200, bbox_inches="tight")
             print(f"Saved separate figure: {fig_path}")
-        plt.show()
-
-
-# =============================================================================
-# Experiment 3: Heterogeneous Convergence and Strategy Dynamics Plotting
-# =============================================================================
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)

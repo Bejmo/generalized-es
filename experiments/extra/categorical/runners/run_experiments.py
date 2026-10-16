@@ -240,7 +240,7 @@ def run_categorical_single(
 # 4. Study 1: Legacy Softmax vs. New Jump Operator
 # =============================================================================
 
-def run_study_1(results_dir: str, figures_dir: str) -> Dict:
+def run_study_1(data_dir: str, figures_dir: str) -> Dict:
     seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
     n_runs = len(seeds)
 
@@ -398,11 +398,11 @@ def run_study_1(results_dir: str, figures_dir: str) -> Dict:
     print(f"Plot saved to: {plot_path}")
     print("=" * 90)
 
-    json_path = os.path.join(results_dir, "categorical_comparison_results.json")
+    json_path = os.path.join(data_dir, "categorical_comparison_results.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(all_data, f, indent=2)
 
-    npz_path = os.path.join(results_dir, "categorical_comparison_data.npz")
+    npz_path = os.path.join(data_dir, "categorical_comparison_data.npz")
     np.savez_compressed(npz_path, **npz_data)
     print(f"NumPy arrays saved to: {npz_path}")
 
@@ -413,7 +413,7 @@ def run_study_1(results_dir: str, figures_dir: str) -> Dict:
 # 5. Study 2: Binary XOR vs. Categorical K=2 (50 Seeds)
 # =============================================================================
 
-def run_study_2(results_dir: str, figures_dir: str) -> Dict:
+def run_study_2(data_dir: str, figures_dir: str) -> Dict:
     n_vars = 32
     seeds = list(range(1, 51))
     target = np.random.default_rng(999).integers(0, 2, size=n_vars, dtype=np.uint8)
@@ -512,11 +512,11 @@ def run_study_2(results_dir: str, figures_dir: str) -> Dict:
     print(f"Plot saved to: {plot_path}")
     print("=" * 90)
 
-    json_path = os.path.join(results_dir, "binary_vs_categorical_k2.json")
+    json_path = os.path.join(data_dir, "binary_vs_categorical_k2.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
 
-    npz_path = os.path.join(results_dir, "binary_vs_categorical_data.npz")
+    npz_path = os.path.join(data_dir, "binary_vs_categorical_data.npz")
     np.savez_compressed(
         npz_path,
         seeds=np.array(seeds),
