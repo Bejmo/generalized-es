@@ -165,11 +165,22 @@ def main() -> None:
     # Save to results directory
     out_dir = Path(__file__).resolve().parent.parent / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "factorial_ablation_results.json"
+    out_path = out_dir / "factorial_study_results.json"
+    out_npz = out_dir / "factorial_study_data.npz"
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(structured_results, f, indent=2)
+
+    # Save compact .npz arrays
+    save_dict = {"seeds": np.array(SEEDS)}
+    for var_name in VARIANTS:
+        for b_key in BENCHMARKS:
+            seed_map = raw_results[var_name][b_key]
+            save_dict[f"{var_name}_{b_key}"] = np.array([seed_map[s] for s in SEEDS], dtype=np.float64)
+    np.savez_compressed(out_npz, **save_dict)
+
     print(f"\n[OK] Results successfully saved to: {out_path}")
+    print(f"[OK] NumPy arrays successfully saved to: {out_npz}")
 
     # Summary table output
     elapsed = time.time() - t_start

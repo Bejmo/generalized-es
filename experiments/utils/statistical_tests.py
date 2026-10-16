@@ -146,9 +146,7 @@ def run_experiment_3():
     across 3 heterogeneous benchmarks: Sphere, Coupled, Rastrigin.
     """
     exp3_file = REPO_ROOT / "experiments/data/experiment_3/exp3_traces.npz"
-    baseline_file = REPO_ROOT / "experiments/extra/ablation/results/random_search_results.json"
-    if not baseline_file.exists():
-        baseline_file = REPO_ROOT / "experiments/baselines_and_ablations/results/random_search_results.json"
+    baseline_file = REPO_ROOT / "experiments/data/experiment_3/random_search_results.json"
 
     data3 = np.load(exp3_file, allow_pickle=True)
     with open(baseline_file, "r") as f:

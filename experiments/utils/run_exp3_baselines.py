@@ -205,9 +205,10 @@ def main():
     print("=" * 70)
 
     targets = get_default_targets(CONFIG)
-    output_dir = Path(__file__).resolve().parent.parent / "results"
+    output_dir = PROJECT_ROOT / "experiments" / "data" / "experiment_3"
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "random_search_results.json"
+    npz_path = output_dir / "random_search_baselines.npz"
 
     rs_results: Dict[str, Any] = {}
     cma_results: Dict[str, Any] = {}
@@ -289,7 +290,16 @@ def main():
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(combined_results, f, indent=2)
 
+    # Save compact .npz arrays
+    save_dict = {"seeds": np.array(SEEDS)}
+    for key, _, _ in BENCHMARKS:
+        save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][s] for s in SEEDS], dtype=np.float64)
+        if HAS_CMA:
+            save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][s] for s in SEEDS], dtype=np.float64)
+    np.savez_compressed(npz_path, **save_dict)
+
     print(f"\n[OK] Results successfully saved to: {results_path}")
+    print(f"[OK] NumPy arrays successfully saved to: {npz_path}")
 
     # 4. Summary Table Output
     print("\n" + "=" * 70)

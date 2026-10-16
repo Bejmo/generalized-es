@@ -281,6 +281,7 @@ def run_study_1(results_dir: str, figures_dir: str) -> Dict:
     ]
 
     all_data = {}
+    npz_data = {"seeds": np.array(seeds)}
     total_wins, total_ties, total_losses = 0, 0, 0
 
     print("\n" + "=" * 90)
@@ -354,6 +355,11 @@ def run_study_1(results_dir: str, figures_dir: str) -> Dict:
             "new_traces_mean": np.mean(new_traces, axis=0).tolist(),
         }
 
+        npz_data[f"{b['id']}_legacy_losses"] = arr_leg
+        npz_data[f"{b['id']}_new_losses"] = arr_new
+        npz_data[f"{b['id']}_legacy_traces"] = np.array(legacy_traces)
+        npz_data[f"{b['id']}_new_traces"] = np.array(new_traces)
+
         print(f"Legacy Softmax: Loss = {np.mean(arr_leg):.2f} +/- {np.std(arr_leg):.2f} | Succ = {succ_leg:5.1f}% | Time = {mean_t_leg:.2f}s")
         print(f"New Jump:       Loss = {np.mean(arr_new):.2f} +/- {np.std(arr_new):.2f} | Succ = {succ_new:5.1f}% | Time = {mean_t_new:.2f}s")
         print(f"Wilcoxon W = {w_stat:.1f}, p = {w_p:.4e} | Record (W/T/L): {wins}/{ties}/{losses} | Speedup: {speedup:.1f}x")
@@ -384,6 +390,10 @@ def run_study_1(results_dir: str, figures_dir: str) -> Dict:
     json_path = os.path.join(results_dir, "categorical_comparison_results.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(all_data, f, indent=2)
+
+    npz_path = os.path.join(results_dir, "categorical_comparison_data.npz")
+    np.savez_compressed(npz_path, **npz_data)
+    print(f"NumPy arrays saved to: {npz_path}")
 
     return all_data
 
@@ -494,6 +504,17 @@ def run_study_2(results_dir: str, figures_dir: str) -> Dict:
     json_path = os.path.join(results_dir, "binary_vs_categorical_k2.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
+
+    npz_path = os.path.join(results_dir, "binary_vs_categorical_data.npz")
+    np.savez_compressed(
+        npz_path,
+        seeds=np.array(seeds),
+        binary_losses=arr_bin,
+        categorical_losses=arr_cat,
+        binary_times=np.array(time_bin),
+        categorical_times=np.array(time_cat),
+    )
+    print(f"NumPy arrays saved to: {npz_path}")
 
     return summary_data
 
