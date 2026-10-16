@@ -285,3 +285,49 @@ def build_heterogeneous_summary_table(
     if pd is not None:
         return pd.DataFrame(rows)
     return rows
+
+
+def load_heterogeneous_benchmark_suite(
+    data_dir: str,
+    benchmarks: Dict[str, Any],
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Load precomputed heterogeneous benchmark traces from exp3_traces.npz."""
+    traces_path = os.path.join(data_dir, "exp3_traces.npz")
+    if not os.path.exists(traces_path):
+        return None
+    loaded = np.load(traces_path, allow_pickle=True)
+    results: Dict[str, Dict[str, Any]] = {}
+    for bench_name in benchmarks.keys():
+        key = f"{bench_name}__traces"
+        if key in loaded:
+            traces_arr = loaded[key]
+            results[bench_name] = {
+                "mean": np.mean(traces_arr, axis=0),
+                "std": np.std(traces_arr, axis=0),
+                "min": np.min(traces_arr, axis=0),
+                "max": np.max(traces_arr, axis=0),
+                "traces": traces_arr,
+            }
+    return results
+
+
+def load_heterogeneous_dynamics_tracking(
+    data_dir: str,
+    benchmarks: Dict[str, Any],
+) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Dict[str, np.ndarray]]]]:
+    """Load precomputed heterogeneous dynamics from exp3_strategy_dynamics.npz."""
+    dynamics_path = os.path.join(data_dir, "exp3_strategy_dynamics.npz")
+    if not os.path.exists(dynamics_path):
+        return None, None
+    loaded = np.load(dynamics_path, allow_pickle=True)
+    all_saved_data = {k: loaded[k] for k in loaded.files}
+    bench_dynamics: Dict[str, Dict[str, np.ndarray]] = {}
+    for bench_name in benchmarks.keys():
+        prefix = f"{bench_name}__"
+        bench_agg: Dict[str, np.ndarray] = {}
+        for k in loaded.files:
+            if k.startswith(prefix) and not k.endswith("_raw"):
+                metric_name = k[len(prefix):]
+                bench_agg[metric_name] = loaded[k]
+        bench_dynamics[bench_name] = bench_agg
+    return all_saved_data, bench_dynamics

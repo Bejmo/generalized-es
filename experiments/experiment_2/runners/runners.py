@@ -261,3 +261,43 @@ def compute_dts_summary_metrics(results_list: List[Dict[str, Any]], g_shift: int
 # =============================================================================
 # Experiment 3: Heterogeneous Benchmark Suite & Dynamics Tracking
 # =============================================================================
+
+
+def save_dts_results(results: Dict[str, Dict[str, Any]], data_dir: str) -> str:
+    """Save multi-variable DTS traces into a single compressed .npz archive."""
+    os.makedirs(data_dir, exist_ok=True)
+    save_dict: Dict[str, Any] = {}
+    for var_type, res in results.items():
+        save_dict[f"{var_type}__fitness"] = res["fitness"]
+        save_dict[f"{var_type}__strategy"] = res["strategy"]
+        save_dict[f"{var_type}__invariants"] = res["invariants"]
+        save_dict[f"{var_type}__seeds"] = np.array(res["seeds"])
+        save_dict[f"{var_type}__meta"] = np.array([res["n_gens"], res["g_shift"]])
+    out_path = os.path.join(data_dir, "dts_traces.npz")
+    np.savez_compressed(out_path, **save_dict)
+    print(f"DTS traces successfully saved to: {out_path}")
+    return out_path
+
+
+def load_dts_results(data_dir: str) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Load precomputed DTS traces from data_dir/dts_traces.npz."""
+    in_path = os.path.join(data_dir, "dts_traces.npz")
+    if not os.path.exists(in_path):
+        return None
+    loaded = np.load(in_path, allow_pickle=True)
+    results: Dict[str, Dict[str, Any]] = {}
+    var_types = ["real", "count", "binary", "categorical", "fuzzy", "circular"]
+    for vt in var_types:
+        fit_key = f"{vt}__fitness"
+        if fit_key in loaded:
+            meta = loaded[f"{vt}__meta"]
+            results[vt] = {
+                "var_type": vt,
+                "fitness": loaded[f"{vt}__fitness"],
+                "strategy": loaded[f"{vt}__strategy"],
+                "invariants": loaded[f"{vt}__invariants"],
+                "seeds": list(loaded[f"{vt}__seeds"]),
+                "n_gens": int(meta[0]),
+                "g_shift": int(meta[1]),
+            }
+    return results

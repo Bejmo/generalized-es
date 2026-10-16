@@ -21,7 +21,12 @@ import os
 from pathlib import Path
 import numpy as np
 
-from experiments.experiment_2.runners.runners import run_dts_experiment, compute_dts_summary_metrics
+from experiments.experiment_2.runners.runners import (
+    run_dts_experiment,
+    compute_dts_summary_metrics,
+    save_dts_results,
+    load_dts_results,
+)
 from experiments.experiment_2.runners.plotting import (
     plot_dts_fitness,
     plot_dts_strategy,
@@ -65,10 +70,18 @@ def main():
     # Circular
     results["circular"] = run_dts_experiment("circular", 6, 0, 6, seeds, args.n_gens, args.g_shift, circular_k=np.full(6, 12, dtype=np.int64))
 
-    # Save summary table
-    df = compute_dts_summary_metrics(list(results.values()), g_shift=args.g_shift, n_gens=args.n_gens)
+    # Save summary table and raw traces
+    save_dts_results(results, data_dir)
+    metrics_res = compute_dts_summary_metrics(list(results.values()), g_shift=args.g_shift, n_gens=args.n_gens)
     csv_path = os.path.join(data_dir, "dts_summary_table.csv")
-    df.to_csv(csv_path, index=False)
+    if hasattr(metrics_res, "to_csv"):
+        metrics_res.to_csv(csv_path, index=False)
+    else:
+        import csv
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=metrics_res[0].keys())
+            writer.writeheader()
+            writer.writerows(metrics_res)
     print(f"Summary table saved to: {csv_path}")
 
     # Generate individual plots
