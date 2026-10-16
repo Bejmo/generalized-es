@@ -18,8 +18,8 @@ The framework natively co-evolves 6 decision variable domains alongside their re
 | :--- | :--- | :--- | :--- | :--- |
 | **Real ($\mathbb{R}$)** | $`\mathbb{R}^{N_\text{real}}`$ | $`\boldsymbol{\sigma}_\text{real} \in \mathbb{R}_{>0}^{N_\text{real}}`$ | Gaussian | Specular reflection: $`x' = \text{reflect}(x + \sigma \cdot \mathcal{N}(0,1), [L, U])`$ |
 | **Count ($\mathbb{Z}$)** | $`\mathbb{Z}_{\ge 0}^{N_\text{count}}`$ | $`\boldsymbol{\lambda}_\text{count} \in \mathbb{R}_{>0}^{N_\text{count}}`$ | Symmetric Skellam | Difference of Poissons: $`x' = \text{clip}(x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda), [L, U])`$ |
-| **Binary ($\mathbb{B}$)** | $`\{0, 1\}^{N_\text{binary}}`$ | $`\mathbf{z}_\text{bin} \in \mathbb{R}^{N_\text{binary}}`$ | Bit-Flip (XOR) | Guided by Bernoulli($`p`$), where $`p = \sigma(z) \in (0, 1)`$ |
-| **Categorical ($\mathbb{C}$)** | $`\prod_k \{0, \dots, K_k - 1\}`$ | $`\mathbf{z}_\text{cat} \in \mathbb{R}^{\sum K_k}`$ | Softmax Resampling | Sample from categorical distribution: $`p_k = \text{softmax}(\mathbf{z}_k)`$ |
+| **Binary ($\mathbb{B}$)** | $`\{0, 1\}^{N_\text{binary}}`$ | $`\mathbf{z}_\text{bin} \in [-4.6, 0.0]^{N_\text{binary}}`$ | Bit-Flip (XOR) | Guided by Bernoulli($`p`$), where $`p = \sigma(z) \in [0.01, 0.50]`$ |
+| **Categorical ($\mathbb{C}$)** | $`\prod_k \{0, \dots, K_k - 1\}`$ | $`\mathbf{z}_\text{cat} \in [-4.6, 0.0]^{N_\text{cat}}`$ | Modular Jump | Jump offset: $`(c + \Delta) \pmod K`$ with prob. $`p = \sigma(z)`$, inertia $`1-p`$ |
 | **Fuzzy ($\mathbb{F}$)** | $`([0, 1] \times [\epsilon, d_\text{max}])^{N_\text{fuzzy}}`$ | $`\boldsymbol{\sigma}_\text{fuzzy} \in \mathbb{R}_{>0}^{2 \cdot N_\text{fuzzy}}`$ | Dual Gaussian Reflection | Perturb $`(m, d)`$: reflect $`m' \in [0, 1]`$, reflect & clamp $`d' \in [\epsilon, d_\text{max}]`$ |
 | **Circular ($\mathbb{O}$)** | $`\prod_k \mathbb{Z}_{K_k}`$ | $`\boldsymbol{\lambda}_\text{circ} \in \mathbb{R}_{>0}^{N_\text{circ}}`$ | Modular Skellam | Ring offset: $`x' = (x + \text{Pois}_1(\lambda) - \text{Pois}_2(\lambda)) \pmod{K_k}`$ |
 

@@ -13,6 +13,17 @@ and 10 canonical seeds (42, 143, 244, 345, 446, 547, 648, 749, 850, 951) with MA
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to sys.path for direct script invocation
+for parent in [Path.cwd().resolve()] + list(Path(__file__).resolve().parents):
+    if (parent / "src").is_dir():
+        if str(parent) not in sys.path:
+            sys.path.insert(0, str(parent))
+        break
+
+
 import os
 import sys
 import json
@@ -124,7 +135,7 @@ def main() -> None:
     total_tasks = len(tasks)
     print(f"Total experiment runs to execute: {total_tasks}")
 
-    raw_results: Dict[str, Dict[str, Dict[int, float]]] = {
+    raw_data: Dict[str, Dict[str, Dict[int, float]]] = {
         v: {b: {} for b in BENCHMARKS} for v in VARIANTS
     }
 
@@ -136,25 +147,25 @@ def main() -> None:
         futures = [executor.submit(run_single_experiment, *task) for task in tasks]
         for f in as_completed(futures):
             var_name, b_key, seed, fitness = f.result()
-            raw_results[var_name][b_key][seed] = fitness
+            raw_data[var_name][b_key][seed] = fitness
             completed += 1
             print(
                 f"[{completed:2d}/{total_tasks:2d}] {var_name:<20} | {b_key:<10} | "
                 f"Seed {seed:5d} -> Best: {fitness:.6e}"
             )
 
-    # Format structured results
-    structured_results: Dict[str, Any] = {}
+    # Format structured data
+    structured_data: Dict[str, Any] = {}
     for var_name, var_info in VARIANTS.items():
-        structured_results[var_name] = {
+        structured_data[var_name] = {
             "description": var_info["description"],
             "strategy_recomb_scale": var_info["strategy_recomb_scale"],
             "circular_mutation_operator": var_info["circular_mutation_operator"],
         }
         for b_key in BENCHMARKS:
-            seed_map = raw_results[var_name][b_key]
+            seed_map = raw_data[var_name][b_key]
             vals = [seed_map[s] for s in SEEDS]
-            structured_results[var_name][b_key] = {
+            structured_data[var_name][b_key] = {
                 "min": float(np.min(vals)),
                 "mean": float(np.mean(vals)),
                 "std": float(np.std(vals)),
@@ -162,20 +173,20 @@ def main() -> None:
                 "per_seed": {str(s): seed_map[s] for s in SEEDS},
             }
 
-    # Save to results directory
-    out_dir = Path(__file__).resolve().parent.parent / "results"
+    # Save to data directory
+    out_dir = Path(__file__).resolve().parent.parent / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "factorial_study_results.json"
+    out_path = out_dir / "factorial_study_data.json"
     out_npz = out_dir / "factorial_study_data.npz"
 
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(structured_results, f, indent=2)
+        json.dump(structured_data, f, indent=2)
 
     # Save compact .npz arrays
     save_dict = {"seeds": np.array(SEEDS)}
     for var_name in VARIANTS:
         for b_key in BENCHMARKS:
-            seed_map = raw_results[var_name][b_key]
+            seed_map = raw_data[var_name][b_key]
             save_dict[f"{var_name}_{b_key}"] = np.array([seed_map[s] for s in SEEDS], dtype=np.float64)
     np.savez_compressed(out_npz, **save_dict)
 
@@ -193,7 +204,7 @@ def main() -> None:
         print(f"  {'Benchmark':<12} | {'Min':<14} | {'Mean':<14} | {'Std':<14} | {'Max':<14}")
         print("  " + "-" * 66)
         for b_key in ["sphere", "coupled", "rastrigin"]:
-            stats = structured_results[var_name][b_key]
+            stats = structured_data[var_name][b_key]
             print(
                 f"  {b_key:<12} | {stats['min']:<14.6e} | {stats['mean']:<14.6e} | "
                 f"{stats['std']:<14.6e} | {stats['max']:<14.6e}"

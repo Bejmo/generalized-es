@@ -11,7 +11,4 @@ __pycache__/
 *.py[cod]
 **/*.py[cod]
 .pytest_cache/
-
-# Save data
-experiments/data/
-experiments/*_*.png
+

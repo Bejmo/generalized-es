@@ -18,7 +18,7 @@ experiments/extra/circular_and_geometric_mean/
 ├── circular_and_geometric_mean_analysis.ipynb  # Interactive Jupyter Notebook visualizing metrics and plots
 ├── runners/
 │   └── run_factorial_study.py                  # CLI runner executing the 2x2 factorial study
-└── results/
+└── data/
     ├── factorial_study_data.npz                # Compact NumPy binary archive with per-seed losses
     ├── factorial_study_results.json            # Structured statistical summary (min, mean, std, max)
     ├── ablation_history.json                   # Architectural progression history

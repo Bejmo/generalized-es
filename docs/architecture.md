@@ -71,7 +71,7 @@ flowchart TD
         direction TB
         Recombine["1. Recombine Parents (Dual Discrete & Global Intermediate)"]
         AdaptS["2. Adapt Strategy Parameters (Log-Normal & Logit-Normal)"]
-        MutateV["3. Mutate Decision Variables (Gaussian, Skellam, Softmax, Ring)"]
+        MutateV["3. Mutate Decision Variables (Gaussian, Skellam, Modular Jump, Ring)"]
         EvalC["4. Evaluate Offspring Fitness"]
         
         Recombine --> AdaptS --> MutateV --> EvalC
@@ -111,7 +111,7 @@ TFG/
 │   │       ├── real.py                                     #       RealVariable (Gaussian mutation with reflection)
 │   │       ├── count.py                                    #       CountVariable (Skellam mutation with clipping)
 │   │       ├── binary.py                                   #       BinaryVariable (Bit-flip mutation via sigmoid)
-│   │       ├── categorical.py                              #       CategoricalVariable (Softmax resample)
+│   │       ├── categorical.py                              #       CategoricalVariable (Modular jump with phenotypic inertia)
 │   │       ├── fuzzy.py                                    #       FuzzyVariable (Center-dispersion parameterization with reflection)
 │   │       └── circular.py                                 #       CircularVariable (Modular Skellam ring mutation)
 │   ├── benchmarks/                                         #   Objective Benchmark Landscapes

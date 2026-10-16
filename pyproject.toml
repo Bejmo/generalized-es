@@ -22,7 +22,6 @@ dev = [
 [project.scripts]
 es-model = "src.es_model.main:main"
 generalized-es = "src.es_model.main:main"
-statistical-tests = "experiments.utils.statistical_tests:main"
 
 [project.urls]
 Repository = "https://github.com/Bejmo/tfg-generalized-es"

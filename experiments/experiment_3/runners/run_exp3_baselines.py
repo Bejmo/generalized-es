@@ -16,6 +16,17 @@ experiments/ablation_progress/random_search_results.json
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to sys.path for direct script invocation
+for parent in [Path.cwd().resolve()] + list(Path(__file__).resolve().parents):
+    if (parent / "src").is_dir():
+        if str(parent) not in sys.path:
+            sys.path.insert(0, str(parent))
+        break
+
+
 import json
 import os
 import sys

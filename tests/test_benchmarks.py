@@ -69,7 +69,7 @@ class TestGeneralizedBenchmarks(unittest.TestCase):
             self.assertGreaterEqual(val, 0.0)
 
     def test_decomposition_at_optimum(self) -> None:
-        from experiments.utils.runners import compute_heterogeneous_decomposition
+        from experiments.experiment_3.runners.runners import compute_heterogeneous_decomposition
         targets = get_default_targets(self.config)
         ind = Individual.random(self.rng, self.config)
 
