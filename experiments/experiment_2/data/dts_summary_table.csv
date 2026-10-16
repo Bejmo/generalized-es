@@ -1,7 +1,7 @@
 Variable Type,Cooling Ratio (Phase A),Re-inflation Lag (gens),Phase C/A Speed Ratio,Invariant Violations
-Real (R),2.71e+06,323,0.60,0
-Count (Z),5.54e+01,27,1.06,0
-Binary (B),-2.02e+12,230,1.08,0
-Categorical (C),5.67e+00,59,1.03,0
-Fuzzy (F),4.75e+04,129,1.11,0
-Circular (S1),4.43e+01,14,1.08,0
+Real (R),2.57e+06,336,0.58,0
+Count (Z),4.59e+01,31,1.05,0
+Binary (B),-2.00e+12,60,1.03,0
+Categorical (C),-2.00e+12,322,1.02,0
+Fuzzy (F),5.14e+04,129,1.12,0
+Circular (S1),3.74e+01,13,1.09,0
