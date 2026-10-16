@@ -186,15 +186,10 @@ def categorical_deceptive(
     """
     cfg = config if config is not None else DEFAULT_CONFIG
     u = unpack_genome(x_or_ind, cfg)
-    cost = 0.0
-    for val in u.categorical:
-        if val == 0:
-            cost += 0.0
-        elif val == 1:
-            cost += 0.1
-        else:
-            cost += 1.0
-    return float(cost)
+    if len(u.categorical) == 0:
+        return 0.0
+    costs = np.where(u.categorical == 0, 0.0, np.where(u.categorical == 1, 0.1, 1.0))
+    return float(np.sum(costs))
 
 
 class CategoricalCycling:

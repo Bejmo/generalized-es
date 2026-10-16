@@ -455,20 +455,14 @@ def run_heterogeneous_dynamics_tracking(
                 p_flips = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_binary, -700.0, 700.0)))
                 history["p_flip_binary"].append(float(np.mean(p_flips)))
 
-                offset = 0
-                confs = []
-                entropies = []
-                for k in config.categorical_k:
-                    k_int = int(k)
-                    sl = best_p.logit_cat[offset : offset + k_int]
-                    ez = np.exp(sl - np.max(sl))
-                    probs = ez / np.sum(ez)
-                    confs.append(float(np.max(probs)))
-                    h = -float(np.sum(probs * np.log(np.maximum(probs, 1e-12)))) / np.log(k_int)
-                    entropies.append(h)
-                    offset += k_int
-                history["cat_confidence"].append(float(np.mean(confs)))
-                history["cat_entropy_norm"].append(float(np.mean(entropies)))
+                p_mut_cat = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_cat, -700.0, 700.0)))
+                history["cat_confidence"].append(float(np.mean(1.0 - p_mut_cat)) if len(p_mut_cat) > 0 else 0.0)
+                if len(p_mut_cat) > 0:
+                    p_c = np.clip(p_mut_cat, 1e-12, 1.0 - 1e-12)
+                    h_cat = -(p_c * np.log2(p_c) + (1.0 - p_c) * np.log2(1.0 - p_c))
+                    history["cat_entropy_norm"].append(float(np.mean(h_cat)))
+                else:
+                    history["cat_entropy_norm"].append(0.0)
 
                 decomp = compute_heterogeneous_decomposition(best_p, bench_name, config)
                 for k_cost, v_cost in decomp.items():

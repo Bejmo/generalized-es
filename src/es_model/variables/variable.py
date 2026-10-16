@@ -219,18 +219,19 @@ class Variable(ABC):
         and arithmetic mean for logit parameters (log-odds space).
         """
         n = self.strategy_dim
-        if n == 0:
+        if n == 0 or len(others) == 0:
             return self.strategy.copy()
-        result = self.strategy.copy()
         num_parents = len(others)
-        for j in range(n):
-            second_idx = int(rng.integers(0, num_parents))
-            donor_val = others[second_idx].strategy[j]
-            if self.strategy_recomb == "geometric":
-                result[j] = float(np.sqrt(np.maximum(result[j] * donor_val, 1e-12)))
-            else:
-                result[j] = (result[j] + donor_val) / 2.0
-        return result
+        if num_parents == 1:
+            donor_vals = others[0].strategy
+        else:
+            sec_idx = rng.integers(0, num_parents, size=n)
+            mat = np.array([o.strategy for o in others], dtype=np.float64)
+            donor_vals = mat[sec_idx, np.arange(n)]
+
+        if self.strategy_recomb == "geometric":
+            return np.sqrt(np.maximum(self.strategy * donor_vals, 1e-12))
+        return (self.strategy + donor_vals) / 2.0
 
     def flatten(self) -> NDArray[np.float64]:
         """

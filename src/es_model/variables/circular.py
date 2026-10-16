@@ -119,7 +119,7 @@ class CircularVariable(Variable):
     def random(cls, config: ESConfig, rng: np.random.Generator) -> CircularVariable:
         """Create a randomly initialized CircularVariable."""
         values = (
-            np.array([rng.integers(0, int(k)) for k in config.circular_k], dtype=np.int64)
+            rng.integers(0, config.circular_k, dtype=np.int64)
             if config.n_circular > 0
             else np.zeros(0, dtype=np.int64)
         )

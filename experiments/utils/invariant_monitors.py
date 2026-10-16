@@ -118,11 +118,8 @@ def check_categorical_validity(individual: Individual, config: ESConfig) -> int:
     vals = individual.categorical
     if len(vals) == 0:
         return 0
-    violations = 0
-    for i, k in enumerate(config.categorical_k):
-        if vals[i] < 0 or vals[i] >= k:
-            violations += 1
-    return int(violations)
+    violations = int(np.sum((vals < 0) | (vals >= config.categorical_k)))
+    return violations
 
 
 def check_gauge_residual(individual: Individual, config: ESConfig) -> np.ndarray:
@@ -167,14 +164,11 @@ def check_fuzzy_monotonicity(individual: Individual, config: ESConfig) -> int:
     if len(pts) == 0:
         return 0
 
-    violations = 0
-    for i in range(config.n_fuzzy):
-        m, d = pts[i * 2 : i * 2 + 2]
-        a = max(0.0, m - d)
-        b = m
-        c = min(1.0, m + d)
-        if not (a <= b <= c):
-            violations += 1
+    m = pts[0::2]
+    d = pts[1::2]
+    a = np.maximum(0.0, m - d)
+    c = np.minimum(1.0, m + d)
+    violations = int(np.sum(~((a <= m) & (m <= c))))
     return violations
 
 
@@ -228,12 +222,8 @@ def check_circular_range(individual: Individual, config: ESConfig) -> int:
     if len(vals) == 0:
         return 0
 
-    violations = 0
-    k_arr = config.circular_k
-    for i in range(config.n_circular):
-        k = k_arr[i] if len(k_arr) > i else 12
-        if vals[i] < 0 or vals[i] >= k:
-            violations += 1
+    k_arr = config.circular_k if len(config.circular_k) == len(vals) else np.full(len(vals), 12, dtype=np.int64)
+    violations = int(np.sum((vals < 0) | (vals >= k_arr)))
     return violations
 
 
