@@ -72,15 +72,12 @@ def mutate_categorical(
         return values.copy()
 
     probs: NDArray[np.float64] = kernels.sigmoid(logits)
-    mut_mask: NDArray[np.bool_] = rng.random(n) < probs
+    mut_mask: NDArray[np.bool_] = (rng.random(n) < probs) & (categorical_k > 1)
     mutated: NDArray[np.int64] = values.copy()
 
-    for i in range(n):
-        if mut_mask[i]:
-            k = int(categorical_k[i])
-            if k > 1:
-                offset = int(rng.integers(1, k))
-                mutated[i] = (mutated[i] + offset) % k
+    if np.any(mut_mask):
+        offsets = rng.integers(1, categorical_k[mut_mask], dtype=np.int64)
+        mutated[mut_mask] = (mutated[mut_mask] + offsets) % categorical_k[mut_mask]
 
     return mutated
 
@@ -119,7 +116,7 @@ class CategoricalVariable(Variable):
     def random(cls, config: ESConfig, rng: np.random.Generator) -> CategoricalVariable:
         """Create a randomly initialized CategoricalVariable."""
         values = (
-            np.array([rng.integers(0, int(k)) for k in config.categorical_k], dtype=np.int64)
+            rng.integers(0, config.categorical_k, dtype=np.int64)
             if config.n_categorical > 0
             else np.zeros(0, dtype=np.int64)
         )
