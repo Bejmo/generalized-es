@@ -58,8 +58,11 @@ def compute_wilcoxon_table_exp3(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Computes Wilcoxon signed-rank tests for Experiment 3 (Table 5.3).
-    Generalized ES vs [Uniform Random Search, Continuous CMA-ES Rounding]
+    Generalized ES vs [Uniform Random Search, Continuous CMA-ES Rounding, CatCMAwM (2025)]
     across 3 heterogeneous benchmarks: Sphere, Coupled, Rastrigin.
+
+    Enforces strict seed-to-result dictionary matching and global Holm-Bonferroni
+    family-wise correction over all m=9 comparisons.
     """
     data3 = np.load(exp3_traces_path, allow_pickle=True)
     with open(baseline_json_path, "r", encoding="utf-8") as f:
@@ -76,41 +79,39 @@ def compute_wilcoxon_table_exp3(
     else:
         seeds = [int(s) for s in base_data["random_search"]["sphere"]["per_seed"].keys()]
 
-    results = {}
+    all_comparison_records: List[Dict[str, Any]] = []
 
     for bench_key, json_key, bench_name in benchmarks:
         prop_traces = data3[f"{bench_key}__traces"]
         prop_final = prop_traces[:, -1]
-
-        rs_dict = base_data["random_search"][json_key]["per_seed"]
-        cma_dict = base_data["cma_es_relaxation"][json_key]["per_seed"]
-
-        common_seeds = [s for s in seeds if str(s) in rs_dict and str(s) in cma_dict]
-        rs_final = np.array([rs_dict[str(s)] for s in common_seeds])
-        cma_final = np.array([cma_dict[str(s)] for s in common_seeds])
-        prop_sub = prop_final[:len(common_seeds)]
+        prop_dict = {int(s): float(prop_final[i]) for i, s in enumerate(seeds)}
 
         opponents = [
-            ("Random Search", rs_final),
-            ("CMA-ES Rounding", cma_final),
+            ("Random Search", base_data.get("random_search", {}).get(json_key, {}).get("per_seed", {})),
+            ("CMA-ES Rounding", base_data.get("cma_es_relaxation", {}).get(json_key, {}).get("per_seed", {})),
+            ("CatCMAwM (2025)", base_data.get("catcmawm", {}).get(json_key, {}).get("per_seed", {})),
         ]
 
-        bench_records = []
-        raw_p_list = []
-
-        for opp_label, opp_final in opponents:
-            n_cmp = min(len(prop_sub), len(opp_final))
-            if n_cmp < 3:
+        for opp_label, raw_opp_dict in opponents:
+            if not raw_opp_dict:
                 continue
-            p_sub = prop_sub[:n_cmp]
-            o_sub = opp_final[:n_cmp]
+            opp_dict = {int(s): float(v) for s, v in raw_opp_dict.items()}
+            # Strict seed pairing via dictionary lookup
+            shared_seeds = [s for s in seeds if s in prop_dict and s in opp_dict]
+            if len(shared_seeds) < 3:
+                continue
+
+            p_sub = np.array([prop_dict[s] for s in shared_seeds], dtype=np.float64)
+            o_sub = np.array([opp_dict[s] for s in shared_seeds], dtype=np.float64)
             diff = p_sub - o_sub
+
             wins = int(np.sum(diff < 0))
-            losses = int(np.sum(diff > 0))
             ties = int(np.sum(diff == 0))
+            losses = int(np.sum(diff > 0))
 
             if np.all(diff == 0):
                 w_stat, p_val = 0.0, 1.0
+                r_biserial = 0.0
             else:
                 try:
                     res = stats.wilcoxon(p_sub, o_sub, alternative="two-sided")
@@ -119,29 +120,51 @@ def compute_wilcoxon_table_exp3(
                 except Exception:
                     w_stat, p_val = float("nan"), 1.0
 
-            raw_p_list.append(p_val)
-            bench_records.append({
+                # Matched-pairs rank-biserial correlation r = (W_minus - W_plus) / total_ranks
+                non_zero = diff != 0
+                d_nz = diff[non_zero]
+                if len(d_nz) > 0:
+                    ranks = stats.rankdata(np.abs(d_nz))
+                    w_plus = np.sum(ranks[d_nz > 0])   # opponent wins ranks
+                    w_minus = np.sum(ranks[d_nz < 0])  # generalized es wins ranks
+                    total_s = np.sum(ranks)
+                    r_biserial = float((w_minus - w_plus) / total_s) if total_s > 0 else 0.0
+                else:
+                    r_biserial = 0.0
+
+            all_comparison_records.append({
                 "benchmark": bench_name,
                 "opponent": opp_label,
+                "n_seeds": len(shared_seeds),
+                "prop_median": float(np.median(p_sub)),
+                "opp_median": float(np.median(o_sub)),
                 "prop_mean": float(np.mean(p_sub)),
                 "opp_mean": float(np.mean(o_sub)),
                 "wins": wins,
                 "ties": ties,
                 "losses": losses,
                 "w_stat": w_stat,
+                "r_biserial": r_biserial,
                 "raw_p": p_val,
             })
 
-        adj_p, sig = holm_bonferroni(raw_p_list)
-        for i, rec in enumerate(bench_records):
-            rec["adj_p"] = float(adj_p[i])
-            rec["significant"] = bool(sig[i])
-            if sig[i]:
-                rec["decision"] = "Generalized ES Wins" if rec["wins"] > rec["losses"] else "Baseline Wins"
-            else:
-                rec["decision"] = "Statistical Tie"
+    # Global Holm-Bonferroni correction over all m comparisons across benchmarks
+    raw_p_list = [rec["raw_p"] for rec in all_comparison_records]
+    adj_p_list, sig_list = holm_bonferroni(raw_p_list)
 
-        results[bench_name] = bench_records
+    results: Dict[str, List[Dict[str, Any]]] = {}
+    for i, rec in enumerate(all_comparison_records):
+        rec["adj_p"] = float(adj_p_list[i])
+        rec["significant"] = bool(sig_list[i])
+        if sig_list[i]:
+            rec["decision"] = "Generalized ES Wins" if rec["wins"] > rec["losses"] else "Baseline Wins"
+        else:
+            rec["decision"] = "Statistical Tie"
+
+        b_name = rec["benchmark"]
+        if b_name not in results:
+            results[b_name] = []
+        results[b_name].append(rec)
 
     return results
 
@@ -219,11 +242,21 @@ def main():
     baseline_file = os.path.join(data_dir, "random_search_results.json")
     traces_file = os.path.join(data_dir, "exp3_traces.npz")
     if os.path.exists(baseline_file) and os.path.exists(traces_file):
-        print(f"\n--- Statistical Hypothesis Testing vs. External Baselines ({args.n_seeds} Seeds) ---")
+        print(f"\n" + "=" * 115)
+        print(f" TABLE 5.3: STATISTICAL HYPOTHESIS TESTING VS. EXTERNAL BASELINES ({args.n_seeds} SEEDS, GLOBAL HOLM m=9)")
+        print("=" * 115)
+        print(f"{'Benchmark':<24} | {'Opponent':<18} | {'W/T/L':<8} | {'W-stat':<8} | {'r_rb':<7} | {'p_raw':<10} | {'p_adj':<10} | {'Decision'}")
+        print("-" * 115)
         tests_exp3 = compute_wilcoxon_table_exp3(traces_file, baseline_file)
         for bench_name, records in tests_exp3.items():
             for r in records:
-                print(f"{bench_name:<24} | {r['opponent']:<18} | {r['wins']}/{r['ties']}/{r['losses']:<6} | W={r['w_stat']:<6.1f} | p_raw={r['raw_p']:<10.4e} | p_adj={r['adj_p']:<10.4e} | {r['decision']}")
+                wtl = f"{r['wins']}/{r['ties']}/{r['losses']}"
+                w_str = f"{r['w_stat']:.1f}" if not np.isnan(r['w_stat']) else "NaN"
+                r_str = f"{r['r_biserial']:+.3f}"
+                p_r = f"{r['raw_p']:.3e}"
+                p_a = f"{r['adj_p']:.3e}"
+                print(f"{bench_name:<24} | {r['opponent']:<18} | {wtl:<8} | {w_str:<8} | {r_str:<7} | {p_r:<10} | {p_a:<10} | {r['decision']}")
+        print("-" * 115)
 
 
 if __name__ == "__main__":

@@ -31,12 +31,16 @@ def plot_heterogeneous_convergence(
     config: Optional[ESConfig] = None,
     n_seeds: Optional[int] = None,
     save_dir: Optional[str] = None,
+    baselines_path: Optional[str] = None,
     show: bool = True,
 ) -> None:
     """
     Plot and save convergence curves across synthetic benchmarks:
-    1. Standalone publication-grade figures per benchmark saved to save_dir.
-    2. Side-by-side comparative overview across all benchmarks.
+    Compares 4 methods side-by-side using Median and Interquartile Range (IQR [Q1, Q3]):
+    1. Generalized ES (ours)
+    2. CatCMA with Margin (CatCMAwM 2025)
+    3. CMA-ES with Continuous Relaxation & Rounding
+    4. Uniform Random Search
     """
     bench_names = list(results.keys())
     if not bench_names:
@@ -49,27 +53,81 @@ def plot_heterogeneous_convergence(
     cfg_label = f" (μ={config.mu}, λ={config.lam})" if config else ""
 
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
     evals = np.arange(1, max_evals + 1)
 
-    # 1. Save standalone convergence curves separately per benchmark
-    for i, bench_name in enumerate(bench_names):
-        fig, ax = plt.subplots(figsize=(7, 4.8))
+    # Attempt to load external baseline traces if available
+    base_data = None
+    if baselines_path is not None and os.path.exists(baselines_path):
+        base_data = np.load(baselines_path, allow_pickle=True)
+    elif save_dir is not None:
+        cand_path = os.path.abspath(os.path.join(save_dir, "..", "data", "random_search_baselines.npz"))
+        if os.path.exists(cand_path):
+            base_data = np.load(cand_path, allow_pickle=True)
+
+    bench_key_map = {
+        "generalized_sphere": "sphere",
+        "sphere": "sphere",
+        "generalized_coupled": "coupled",
+        "coupled": "coupled",
+        "generalized_rastrigin": "rastrigin",
+        "rastrigin": "rastrigin",
+    }
+
+    # 1. Standalone publication-grade figures per benchmark
+    for bench_name in bench_names:
+        fig, ax = plt.subplots(figsize=(7.5, 5.0))
+        b_key = bench_key_map.get(bench_name.lower(), bench_name.lower().replace("generalized_", ""))
+
+        # A. Generalized ES (ours)
         res = results[bench_name]
-        mean_trace = res["mean"]
-        std_trace = res["std"]
-        col = colors[i % len(colors)]
+        tr_prop = res.get("traces")
+        if tr_prop is not None:
+            med_prop = np.median(tr_prop, axis=0)
+            q25_prop = np.percentile(tr_prop, 25, axis=0)
+            q75_prop = np.percentile(tr_prop, 75, axis=0)
+        else:
+            med_prop = res["mean"]
+            q25_prop = np.maximum(1e-12, med_prop - res["std"])
+            q75_prop = med_prop + res["std"]
 
-        ax.plot(evals, mean_trace, color=col, lw=2.2, label=f"Generalized ES{cfg_label}")
-        ax.fill_between(evals, np.maximum(1e-12, mean_trace - std_trace), mean_trace + std_trace, color=col, alpha=0.25, label="±1 Std Dev")
+        ax.plot(evals, med_prop, color="#1f77b4", lw=2.4, label=f"Generalized ES{cfg_label} (Median)")
+        ax.fill_between(evals, np.maximum(1e-12, q25_prop), q75_prop, color="#1f77b4", alpha=0.22, label="Gen ES IQR [Q1, Q3]")
 
-        ax.set_title(f"{bench_name}: Fitness Convergence ({n_seeds} Seeds)", fontsize=12, fontweight="bold")
+        # B. External baselines from base_data
+        if base_data is not None:
+            # 1. CatCMAwM (2025)
+            cat_key = f"{b_key}__catcmawm_traces"
+            if cat_key in base_data:
+                tr_cat = base_data[cat_key]
+                med_cat = np.median(tr_cat, axis=0)
+                q25_cat = np.percentile(tr_cat, 25, axis=0)
+                q75_cat = np.percentile(tr_cat, 75, axis=0)
+                ax.plot(evals, med_cat, color="#2ca02c", lw=2.0, label="CatCMAwM 2025 (Median)")
+                ax.fill_between(evals, np.maximum(1e-12, q25_cat), q75_cat, color="#2ca02c", alpha=0.18, label="CatCMAwM IQR")
+
+            # 2. CMA-ES Rounding
+            cma_key = f"{b_key}__cma_traces"
+            if cma_key in base_data:
+                tr_cma = base_data[cma_key]
+                med_cma = np.median(tr_cma, axis=0)
+                q25_cma = np.percentile(tr_cma, 25, axis=0)
+                q75_cma = np.percentile(tr_cma, 75, axis=0)
+                ax.plot(evals, med_cma, color="#d62728", lw=1.8, ls="-.", label="CMA-ES Rounding (Median)")
+                ax.fill_between(evals, np.maximum(1e-12, q25_cma), q75_cma, color="#d62728", alpha=0.14)
+
+            # 3. Random Search
+            rs_key = f"{b_key}__rs_traces"
+            if rs_key in base_data:
+                tr_rs = base_data[rs_key]
+                med_rs = np.median(tr_rs, axis=0)
+                ax.plot(evals, med_rs, color="#7f7f7f", lw=1.5, ls="--", label="Random Search (Median)")
+
+        ax.set_title(f"{bench_name}: Convergence Comparison ({n_seeds} Seeds)", fontsize=12, fontweight="bold")
         ax.set_xlabel("Function Evaluations", fontsize=11)
         ax.set_ylabel("Best Fitness (Log Scale)", fontsize=11)
         ax.set_yscale("log")
         ax.grid(True, which="both", ls="--", alpha=0.5)
-        ax.legend(loc="upper right", frameon=True)
+        ax.legend(loc="upper right", frameon=True, fontsize=9)
 
         plt.tight_layout()
         if save_dir is not None:
@@ -82,28 +140,53 @@ def plot_heterogeneous_convergence(
         else:
             plt.close(fig)
 
-    # 2. Interactive comparative overview in notebook
+    # 2. Interactive comparative overview
     if not show:
         return
     n_b = len(bench_names)
-    fig, axes = plt.subplots(1, n_b, figsize=(6 * n_b, 5), sharey=False)
+    fig, axes = plt.subplots(1, n_b, figsize=(6.2 * n_b, 5), sharey=False)
     if not isinstance(axes, (list, np.ndarray)):
         axes = [axes]
     for i, bench_name in enumerate(bench_names):
         ax = axes[i]
-        res = results[bench_name]
-        mean_trace = res["mean"]
-        std_trace = res["std"]
-        col = colors[i % len(colors)]
+        b_key = bench_key_map.get(bench_name.lower(), bench_name.lower().replace("generalized_", ""))
 
-        ax.plot(evals, mean_trace, color=col, lw=2.0, label=f"Generalized ES{cfg_label}")
-        ax.fill_between(evals, np.maximum(1e-12, mean_trace - std_trace), mean_trace + std_trace, color=col, alpha=0.25, label="±1 Std Dev")
-        ax.set_title(f"{bench_name}\n({n_seeds} Seeds)", fontsize=13, fontweight="bold")
+        res = results[bench_name]
+        tr_prop = res.get("traces")
+        if tr_prop is not None:
+            med_prop = np.median(tr_prop, axis=0)
+            q25_prop = np.percentile(tr_prop, 25, axis=0)
+            q75_prop = np.percentile(tr_prop, 75, axis=0)
+        else:
+            med_prop = res["mean"]
+            q25_prop = np.maximum(1e-12, med_prop - res["std"])
+            q75_prop = med_prop + res["std"]
+
+        ax.plot(evals, med_prop, color="#1f77b4", lw=2.2, label=f"Generalized ES{cfg_label}")
+        ax.fill_between(evals, np.maximum(1e-12, q25_prop), q75_prop, color="#1f77b4", alpha=0.22)
+
+        if base_data is not None:
+            cat_key = f"{b_key}__catcmawm_traces"
+            if cat_key in base_data:
+                med_cat = np.median(base_data[cat_key], axis=0)
+                ax.plot(evals, med_cat, color="#2ca02c", lw=1.8, label="CatCMAwM")
+
+            cma_key = f"{b_key}__cma_traces"
+            if cma_key in base_data:
+                med_cma = np.median(base_data[cma_key], axis=0)
+                ax.plot(evals, med_cma, color="#d62728", lw=1.6, ls="-.", label="CMA-ES Rounding")
+
+            rs_key = f"{b_key}__rs_traces"
+            if rs_key in base_data:
+                med_rs = np.median(base_data[rs_key], axis=0)
+                ax.plot(evals, med_rs, color="#7f7f7f", lw=1.4, ls="--", label="Random Search")
+
+        ax.set_title(f"{bench_name}\n({n_seeds} Seeds)", fontsize=12, fontweight="bold")
         ax.set_xlabel("Function Evaluations", fontsize=11)
         ax.set_ylabel("Best Fitness (Log Scale)", fontsize=11)
         ax.set_yscale("log")
         ax.grid(True, which="both", ls="--", alpha=0.5)
-        ax.legend(loc="upper right", frameon=True)
+        ax.legend(loc="upper right", frameon=True, fontsize=8)
 
     plt.tight_layout()
     plt.show()
