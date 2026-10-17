@@ -11,6 +11,8 @@ dependencies = [
     "cma",
     "pymoo",
     "pandas>=3.0.6",
+    "scipy>=1.12.0",
+    "cmaes>=0.13.1,<0.14",
 ]
 
 [dependency-groups]
