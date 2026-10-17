@@ -27,7 +27,9 @@ from src.benchmarks.generalized_functions import GENERALIZED_BENCHMARKS
 from src.es_model.config import ESConfig
 from experiments.experiment_3.runners.runners import (
     run_heterogeneous_benchmark_suite,
+    load_heterogeneous_benchmark_suite,
     run_heterogeneous_dynamics_tracking,
+    load_heterogeneous_dynamics_tracking,
     build_heterogeneous_summary_table,
 )
 from experiments.experiment_3.runners.plotting import (
@@ -175,6 +177,7 @@ def main():
     parser.add_argument("--n-seeds", type=int, default=40)
     parser.add_argument("--max-workers", type=int, default=8)
     parser.add_argument("--output-dir", type=str, default="experiments/experiment_3")
+    parser.add_argument("--load-precomputed", action="store_true", help="Load precomputed traces and dynamics from data/ instead of re-running simulations.")
     args = parser.parse_args()
 
     seeds = [42 + i * 101 for i in range(args.n_seeds)]
@@ -197,33 +200,43 @@ def main():
         seed=42,
     )
 
-    print(f"Running heterogeneous benchmark suite ({args.n_seeds} seeds, max_evals={args.max_evals})...")
-    results = run_heterogeneous_benchmark_suite(
-        benchmarks=GENERALIZED_BENCHMARKS,
-        config=config,
-        max_evals=args.max_evals,
-        seeds=seeds,
-        data_dir=data_dir,
-        max_workers=args.max_workers,
-    )
+    if args.load_precomputed:
+        print(f"Loading precomputed benchmark suite and dynamics from {data_dir}...")
+        results = load_heterogeneous_benchmark_suite(data_dir, GENERALIZED_BENCHMARKS)
+        if results is None:
+            raise FileNotFoundError(f"Missing traces at {data_dir}/exp3_traces.npz")
+        all_saved_data, bench_dynamics = load_heterogeneous_dynamics_tracking(data_dir, GENERALIZED_BENCHMARKS)
+    else:
+        print(f"Running heterogeneous benchmark suite ({args.n_seeds} seeds, max_evals={args.max_evals})...")
+        results = run_heterogeneous_benchmark_suite(
+            benchmarks=GENERALIZED_BENCHMARKS,
+            config=config,
+            max_evals=args.max_evals,
+            seeds=seeds,
+            data_dir=data_dir,
+            max_workers=args.max_workers,
+        )
 
+        print(f"\nRunning heterogeneous strategy dynamics tracking ({args.n_seeds} seeds)...")
+        all_saved_data, bench_dynamics = run_heterogeneous_dynamics_tracking(
+            benchmarks=GENERALIZED_BENCHMARKS,
+            config=config,
+            seeds=seeds,
+            max_evals=args.max_evals,
+            data_dir=data_dir,
+            max_workers=args.max_workers,
+        )
+
+    # Plot convergence curves comparing all 4 methods
+    baselines_npz_path = os.path.join(data_dir, "random_search_baselines.npz")
     plot_heterogeneous_convergence(
         results=results,
         max_evals=args.max_evals,
         config=config,
         n_seeds=args.n_seeds,
         save_dir=fig_dir,
+        baselines_path=baselines_npz_path,
         show=False,
-    )
-
-    print(f"\nRunning heterogeneous strategy dynamics tracking ({args.n_seeds} seeds)...")
-    all_saved_data, bench_dynamics = run_heterogeneous_dynamics_tracking(
-        benchmarks=GENERALIZED_BENCHMARKS,
-        config=config,
-        seeds=seeds,
-        max_evals=args.max_evals,
-        data_dir=data_dir,
-        max_workers=args.max_workers,
     )
 
     for bench_name, b_agg in bench_dynamics.items():
