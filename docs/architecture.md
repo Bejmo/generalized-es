@@ -48,7 +48,7 @@ flowchart TD
     Ind --> RV["RealVariable<br/>• values: float64[N_real]<br/>• strategy: sigma_real[N_real]<br/>• bounds: [lower, upper]"]
     Ind --> CV["CountVariable<br/>• values: int64[N_count]<br/>• strategy: lambda_count[N_count]<br/>• bounds: [lower, upper]"]
     Ind --> BV["BinaryVariable<br/>• values: uint8[N_binary]<br/>• strategy: logit_binary[N_binary]<br/>• bounds: [0, 1]"]
-    Ind --> CatV["CategoricalVariable<br/>• values: int64[N_cat]<br/>• strategy: logit_cat[sum(K)]<br/>• cardinalities: K"]
+    Ind --> CatV["CategoricalVariable<br/>• values: int64[N_cat]<br/>• strategy: logit_cat[N_cat] (p_mut = sigmoid(z))<br/>• cardinalities: K"]
     Ind --> FV["FuzzyVariable<br/>• values: float64[2 * N_fuzzy] (center m, dispersion d)<br/>• strategy: sigma_fuzzy[2 * N_fuzzy]<br/>• bounds: [0, 1] x [epsilon, d_max]"]
     Ind --> CircV["CircularVariable<br/>• values: int64[N_circ]<br/>• strategy: lambda_circ[N_circ]<br/>• cardinalities: K"]
 
@@ -125,11 +125,26 @@ TFG/
 ├── tests/                                                  # Unit & integration test suites
 │   ├── test_variables.py                                   #     Variable representations & mutation tests
 │   ├── test_individual_and_es.py                           #     Candidate individual & ES optimization cycle tests
-│   └── test_benchmarks.py                                  #     Continuous & generalized benchmark landscape tests
-└── experiments/                                            # Experimental Notebooks
-    ├── experiment_1.ipynb                                  #     Equal-budget benchmark comparisons and plots
-    ├── experiment_2.ipynb                                  #     Dynamic Target Shift (DTS) transversal dynamic tracking
-    └── experiment_3.ipynb                                  #     Synthetic mixed-variable optimization across all 6 variable types
+│   ├── test_benchmarks.py                                  #     Continuous & generalized benchmark landscape tests
+│   └── test_catcmawm_baseline.py                           #     CatCMAwM baseline adapter & domain invariant tests
+└── experiments/                                            # Experimental suites & analysis
+    ├── experiment_1/                                       #     Continuous benchmarks vs. isotropic/sep/standard CMA-ES
+    │   ├── experiment_1.ipynb                              #       Analysis notebook & figures
+    │   └── runners/run_experiment_1.py                     #       Execution & statistical testing runner
+    ├── experiment_2/                                       #     Dynamic Target Shift (DTS) transversal dynamic tracking
+    │   ├── experiment_2.ipynb                              #       Analysis notebook & transversal dynamic tracking
+    │   └── runners/                                        #       Execution and plotting scripts
+    ├── experiment_3/                                       #     Heterogeneous mixed-variable benchmarks (4-way comparison)
+    │   ├── experiment_3.ipynb                              #       Interactive analysis notebook
+    │   ├── runners/                                        #       Execution scripts & statistical testing
+    │   │   ├── run_experiment_3.py                         #         Main runner & paired Wilcoxon hypothesis testing
+    │   │   ├── run_exp3_baselines.py                       #         External baselines runner (RS, CMA-ES, CatCMAwM)
+    │   │   ├── runners.py                                  #         Generalized ES benchmark suite runners
+    │   │   └── plotting.py                                 #         Convergence curves (Median/IQR) & parameter dynamics
+    │   └── data/                                           #       Raw traces (.npz) & baseline results (.json)
+    └── extra/                                              #     Supplementary validation studies (Appendix E)
+        ├── categorical/                                    #       Categorical operator validation & binary equivalence
+        └── circular_and_geometric_mean/                    #       Modular circular & geometric mean validation
 ```
 
 ---
@@ -180,3 +195,5 @@ flowchart TD
 | `src.benchmarks.generalized_functions` | Synthetic mixed-variable test landscapes across all 6 domain types | `sphere_generalized`, `rastrigin_generalized`, `coupled_generalized` | `config`, `individual` | `experiments`, `tests` |
 | `src.runners.*` | Optimizer execution adapters and baseline wrappers | `custom_es.run`, `isotropic_es.run`, `sep_cma_es.run`, `standard_cma_es.run` | `generalized_es`, `config` | `main` |
 | `src.es_model.main` | Unified CLI parser, interactive menu & workflow orchestrator | `main`, `run_model`, `run_benchmarks` | `config`, `generalized_es`, `benchmarks`, `runners` | CLI entrypoints (`es-model`, `generalized-es`) |
+| `experiments.experiment_3.runners.run_exp3_baselines` | External heterogeneous baselines runner (RS, CMA-ES with Rounding, CatCMAwM) | `RandomSearchRunner`, `CMARoundingRunner`, `CatCMAwMRunner`, `run_all_baselines` | `benchmarks.generalized_functions`, `config` | `run_experiment_3`, `tests.test_catcmawm_baseline` |
+| `experiments.experiment_3.runners.run_experiment_3` | Heterogeneous benchmark orchestration, plotting & Wilcoxon hypothesis testing | `compute_wilcoxon_table_exp3`, `holm_bonferroni`, `main` | `benchmarks.generalized_functions`, `config`, `run_exp3_baselines`, `plotting` | `experiments/experiment_3.ipynb`, CLI |
