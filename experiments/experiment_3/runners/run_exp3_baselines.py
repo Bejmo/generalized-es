@@ -1,9 +1,10 @@
 """
-run_random_search_exp3.py: External Baselines for Experiment 3 (Heterogeneous Benchmarks).
+run_exp3_baselines.py: External Baselines for Experiment 3 (Heterogeneous Benchmarks).
 
 Executes:
-1. Uniform Random Search (20,000 evaluations per seed, 10 seeds).
-2. Standard CMA-ES with Continuous Relaxation & Rounding/Clipping (20,000 evaluations per seed, 10 seeds).
+1. Uniform Random Search (20,000 evaluations per seed, 40 seeds).
+2. Standard CMA-ES with Continuous Relaxation & Rounding/Clipping (20,000 evaluations per seed, 40 seeds).
+3. CatCMA with Margin (CatCMAwM, 2025) with native continuous/integer/categorical spaces (20,000 evaluations per seed, 40 seeds).
 
 Evaluates on:
 - Generalized Sphere (convex, separable)
@@ -11,7 +12,8 @@ Evaluates on:
 - Generalized Rastrigin (multimodal, non-convex)
 
 Saves results to:
-experiments/ablation_progress/random_search_results.json
+- experiments/experiment_3/data/random_search_results.json
+- experiments/experiment_3/data/random_search_baselines.npz
 """
 
 from __future__ import annotations
@@ -26,13 +28,11 @@ for parent in [Path.cwd().resolve()] + list(Path(__file__).resolve().parents):
             sys.path.insert(0, str(parent))
         break
 
-
+import concurrent.futures
 import json
 import os
-import sys
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 
@@ -54,6 +54,12 @@ try:
     HAS_CMA = True
 except ImportError:
     HAS_CMA = False
+
+try:
+    from cmaes import CatCMAwM
+    HAS_CATCMAWM = True
+except ImportError:
+    HAS_CATCMAWM = False
 
 
 # Exact Experiment 3 Configuration
@@ -139,18 +145,18 @@ def run_random_search_seed(
     seed: int,
     max_evals: int,
     targets: dict,
-) -> float:
-    """Execute Random Search for a single seed and return the best fitness."""
+) -> Tuple[float, np.ndarray]:
+    """Execute Random Search for a single seed and return the best fitness and evaluation trace."""
     rng = np.random.default_rng(seed)
     candidates = sample_uniform_candidates(rng, max_evals)
-    
+    trace = np.empty(max_evals, dtype=np.float64)
     best_fitness = float("inf")
-    for vec in candidates:
-        fitness = fn(vec, config=CONFIG, targets=targets)
+    for i, vec in enumerate(candidates):
+        fitness = float(fn(vec, config=CONFIG, targets=targets))
         if fitness < best_fitness:
-            best_fitness = float(fitness)
-            
-    return best_fitness
+            best_fitness = fitness
+        trace[i] = best_fitness
+    return best_fitness, trace
 
 
 def evaluate_cma_candidate(x: np.ndarray, fn: Callable, targets: dict) -> float:
@@ -174,7 +180,7 @@ def run_cma_es_seed(
     seed: int,
     max_evals: int,
     targets: dict,
-) -> float:
+) -> Tuple[float, np.ndarray]:
     """Execute CMA-ES with continuous relaxation and rounding for a single seed."""
     rng = np.random.default_rng(seed)
     x0 = rng.uniform(LOWER_BOUNDS, UPPER_BOUNDS)
@@ -190,6 +196,7 @@ def run_cma_es_seed(
     es = cma.CMAEvolutionStrategy(x0, sigma0, opts)
     eval_count = 0
     best_fitness = float("inf")
+    trace = np.empty(max_evals, dtype=np.float64)
     
     while eval_count < max_evals and not es.stop():
         solutions = es.ask()
@@ -199,43 +206,187 @@ def run_cma_es_seed(
             costs.append(cost)
             if cost < best_fitness:
                 best_fitness = cost
+            trace[eval_count] = best_fitness
             eval_count += 1
             if eval_count >= max_evals:
                 break
         es.tell(solutions[:len(costs)], costs)
         
-    return best_fitness
+    while eval_count < max_evals:
+        trace[eval_count] = best_fitness
+        eval_count += 1
+
+    return best_fitness, trace
 
 
-def _worker_rs_seed(args: Tuple[str, int, int]) -> Tuple[int, float]:
+# -----------------------------------------------------------------------------
+# CatCMA with Margin (CatCMAwM, 2025) Adapter & Runner
+# -----------------------------------------------------------------------------
+
+def build_catcmawm_spaces(config: ESConfig) -> Dict[str, Any]:
+    """
+    Construct explicit search spaces, bounds, and initial parameters for CatCMAwM:
+    - x_space: 5 real [-5.12, 5.12] + 4 fuzzy parameters [0, 1]x[1e-4, 1] (9 continuous dimensions)
+    - z_space: 3 count variables with domain [0..20] (3 integer dimensions)
+    - c_space: 4 binary (cardinality 2) + 2 categorical (k=[3, 4]) + 2 circular (k=[7, 12]) (8 categorical dimensions)
+    - mean: explicit midpoint of continuous and integer bounds (length 12)
+    - sigma: 1.0 (standard initial step size)
+    - cat_param: explicit uniform categorical distribution (8 x 12)
+    """
+    x_space = (
+        [[-5.12, 5.12]] * 5
+        + [[0.0, 1.0], [1e-4, 1.0], [0.0, 1.0], [1e-4, 1.0]]
+    )
+    z_space = [list(range(21)) for _ in range(3)]
+    c_space = [2, 2, 2, 2, 3, 4, 7, 12]
+
+    # Explicit initial mean: midpoint of each Gaussian variable
+    # 5 real (center 0.0), 4 fuzzy (center 0.5, 0.50005, 0.5, 0.50005), 3 count (center 10.0)
+    mean = np.array(
+        [0.0] * 5 + [0.5, 0.50005, 0.5, 0.50005] + [10.0] * 3,
+        dtype=np.float64,
+    )
+    sigma = 1.0
+
+    # Explicit categorical initial probabilities (uniform 1/K_i for each variable)
+    k_max = max(c_space)
+    cat_param = np.zeros((len(c_space), k_max), dtype=np.float64)
+    for i, k in enumerate(c_space):
+        cat_param[i, :k] = 1.0 / k
+
+    return {
+        "x_space": x_space,
+        "z_space": z_space,
+        "c_space": c_space,
+        "mean": mean,
+        "sigma": sigma,
+        "cat_param": cat_param,
+    }
+
+
+def decode_catcmawm_solution(sol: Any, config: ESConfig) -> np.ndarray:
+    """
+    Decode CatCMAwM Solution object into canonical 20D phenotype vector:
+    [0:5]   real (5)
+    [5:8]   count (3)
+    [8:12]  binary (4)
+    [12:14] categorical (2)
+    [14:18] fuzzy (4: m1, d1, m2, d2)
+    [18:20] circular (2)
+    """
+    vec = np.empty(20, dtype=np.float64)
+    # Real
+    vec[0:5] = sol.x[0:5]
+    # Count (integer)
+    vec[5:8] = sol.z[0:3]
+    # Categorical: one-hot rows decoded via argmax
+    cat_decoded = np.argmax(sol.c, axis=1)
+    # Binary
+    vec[8:12] = cat_decoded[0:4]
+    # Categorical
+    vec[12:14] = cat_decoded[4:6]
+    # Fuzzy (m1, d1, m2, d2)
+    vec[14:18] = sol.x[5:9]
+    # Circular
+    vec[18:20] = cat_decoded[6:8]
+    return vec
+
+
+def run_catcmawm_seed(
+    fn: Callable,
+    seed: int,
+    max_evals: int,
+    targets: dict,
+) -> Tuple[float, np.ndarray]:
+    """Execute CatCMAwM for a single seed and return the best fitness and evaluation trace."""
+    spaces = build_catcmawm_spaces(CONFIG)
+    optimizer = CatCMAwM(
+        x_space=spaces["x_space"],
+        z_space=spaces["z_space"],
+        c_space=spaces["c_space"],
+        mean=spaces["mean"],
+        sigma=spaces["sigma"],
+        cat_param=spaces["cat_param"],
+        seed=int(seed),
+    )
+    trace = np.empty(max_evals, dtype=np.float64)
+    eval_count = 0
+    best_fitness = float("inf")
+
+    while eval_count < max_evals:
+        solutions = []
+        for _ in range(optimizer.population_size):
+            sol = optimizer.ask()
+            vec = decode_catcmawm_solution(sol, CONFIG)
+            cost = float(fn(vec, config=CONFIG, targets=targets))
+            if cost < best_fitness:
+                best_fitness = cost
+            trace[eval_count] = best_fitness
+            solutions.append((sol, cost))
+            eval_count += 1
+            if eval_count >= max_evals:
+                break
+        if len(solutions) == optimizer.population_size:
+            optimizer.tell(solutions)
+
+    return best_fitness, trace
+
+
+# -----------------------------------------------------------------------------
+# Multiprocessing Worker Callbacks
+# -----------------------------------------------------------------------------
+
+def _worker_rs_seed(args: Tuple[str, int, int]) -> Tuple[int, float, np.ndarray]:
     bench_key, seed, max_evals = args
     bench_dict = {k: fn for k, _, fn in BENCHMARKS}
     fn = bench_dict[bench_key]
     targets = get_default_targets(CONFIG)
-    f_best = run_random_search_seed(fn, seed, max_evals, targets)
-    return seed, f_best
+    f_best, trace = run_random_search_seed(fn, seed, max_evals, targets)
+    return seed, f_best, trace
 
 
-def _worker_cma_seed(args: Tuple[str, int, int]) -> Tuple[int, float]:
+def _worker_cma_seed(args: Tuple[str, int, int]) -> Tuple[int, float, np.ndarray]:
     bench_key, seed, max_evals = args
     bench_dict = {k: fn for k, _, fn in BENCHMARKS}
     fn = bench_dict[bench_key]
     targets = get_default_targets(CONFIG)
-    f_best = run_cma_es_seed(fn, seed, max_evals, targets)
-    return seed, f_best
+    f_best, trace = run_cma_es_seed(fn, seed, max_evals, targets)
+    return seed, f_best, trace
+
+
+def _worker_catcmawm_seed(args: Tuple[str, int, int]) -> Tuple[int, float, np.ndarray]:
+    bench_key, seed, max_evals = args
+    bench_dict = {k: fn for k, _, fn in BENCHMARKS}
+    fn = bench_dict[bench_key]
+    targets = get_default_targets(CONFIG)
+    f_best, trace = run_catcmawm_seed(fn, seed, max_evals, targets)
+    return seed, f_best, trace
+
+
+def _calc_stats(vals: np.ndarray, per_seed_dict: Dict[str, float]) -> Dict[str, Any]:
+    q25 = float(np.percentile(vals, 25))
+    q75 = float(np.percentile(vals, 75))
+    return {
+        "min": float(np.min(vals)),
+        "mean": float(np.mean(vals)),
+        "std": float(np.std(vals)),
+        "max": float(np.max(vals)),
+        "median": float(np.median(vals)),
+        "iqr": float(q75 - q25),
+        "q25": q25,
+        "q75": q75,
+        "per_seed": per_seed_dict,
+    }
 
 
 def main():
-    import concurrent.futures
-
     print("=" * 70)
-    print(" EXPERIMENT 3 (A7) EXTERNAL BASELINE RUNNER")
+    print(" EXPERIMENT 3 EXTERNAL BASELINE RUNNER (4 METHODS)")
     print(f" Config: 20D Heterogeneous Phenotype (5R, 3C, 4B, 2Cat, 2Fuz, 2Circ)")
     print(f" Budget: {MAX_EVALS:,} evaluations | Seeds: {len(SEEDS)} seeds")
-    print(f" CMA-ES available: {HAS_CMA}")
+    print(f" CMA-ES available: {HAS_CMA} | CatCMAwM available: {HAS_CATCMAWM}")
     print("=" * 70)
 
-    targets = get_default_targets(CONFIG)
     output_dir = PROJECT_ROOT / "experiments" / "experiment_3" / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "random_search_results.json"
@@ -243,63 +394,81 @@ def main():
 
     rs_results: Dict[str, Any] = {}
     cma_results: Dict[str, Any] = {}
+    catcmawm_results: Dict[str, Any] = {}
+
+    rs_traces: Dict[str, np.ndarray] = {}
+    cma_traces: Dict[str, np.ndarray] = {}
+    catcmawm_traces: Dict[str, np.ndarray] = {}
 
     # 1. Random Search Evaluation
-    print("\n[1/2] RUNNING UNIFORM RANDOM SEARCH...")
+    print("\n[1/3] RUNNING UNIFORM RANDOM SEARCH...")
     t0 = time.time()
     for key, name, fn in BENCHMARKS:
         print(f"\n>>> Benchmark: {name} ({key})")
         worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
         with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
             raw_rs = list(executor.map(_worker_rs_seed, worker_args))
-        res_dict = dict(raw_rs)
+        # raw_rs is list of (seed, f_best, trace)
+        raw_rs.sort(key=lambda item: item[0])
+        res_dict = {item[0]: item[1] for item in raw_rs}
+        trace_mat = np.array([item[2] for item in raw_rs], dtype=np.float64)
+        rs_traces[key] = trace_mat
+
         values = [res_dict[s] for s in SEEDS]
         per_seed = {str(s): res_dict[s] for s in SEEDS}
-        for s in SEEDS:
-            print(f"  Seed {s:4d} | Best Fitness: {res_dict[s]:12.6f}")
-
         vals_arr = np.array(values, dtype=np.float64)
-        rs_results[key] = {
-            "min": float(np.min(vals_arr)),
-            "mean": float(np.mean(vals_arr)),
-            "std": float(np.std(vals_arr)),
-            "max": float(np.max(vals_arr)),
-            "per_seed": per_seed,
-        }
-        print(f"  -> Min: {np.min(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
+        rs_results[key] = _calc_stats(vals_arr, per_seed)
+        print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
 
     print(f"\nRandom Search completed in {time.time() - t0:.2f} seconds.")
 
     # 2. Standard CMA-ES Continuous Relaxation Evaluation
     if HAS_CMA:
-        print("\n[2/2] RUNNING STANDARD CMA-ES CONTINUOUS RELAXATION...")
+        print("\n[2/3] RUNNING STANDARD CMA-ES CONTINUOUS RELAXATION...")
         t1 = time.time()
         for key, name, fn in BENCHMARKS:
             print(f"\n>>> Benchmark: {name} ({key})")
             worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
             with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
                 raw_cma = list(executor.map(_worker_cma_seed, worker_args))
-            res_dict = dict(raw_cma)
+            raw_cma.sort(key=lambda item: item[0])
+            res_dict = {item[0]: item[1] for item in raw_cma}
+            trace_mat = np.array([item[2] for item in raw_cma], dtype=np.float64)
+            cma_traces[key] = trace_mat
+
             values = [res_dict[s] for s in SEEDS]
             per_seed = {str(s): res_dict[s] for s in SEEDS}
-            for s in SEEDS:
-                print(f"  Seed {s:4d} | Best Fitness: {res_dict[s]:12.6f}")
-
             vals_arr = np.array(values, dtype=np.float64)
-            cma_results[key] = {
-                "min": float(np.min(vals_arr)),
-                "mean": float(np.mean(vals_arr)),
-                "std": float(np.std(vals_arr)),
-                "max": float(np.max(vals_arr)),
-                "per_seed": per_seed,
-            }
-            print(f"  -> Min: {np.min(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
+            cma_results[key] = _calc_stats(vals_arr, per_seed)
+            print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
         print(f"\nCMA-ES Relaxation completed in {time.time() - t1:.2f} seconds.")
 
-    # 3. Save to JSON
+    # 3. CatCMA with Margin (CatCMAwM, 2025) Evaluation
+    if HAS_CATCMAWM:
+        print("\n[3/3] RUNNING CATCMA WITH MARGIN (CatCMAwM, 2025)...")
+        t2 = time.time()
+        for key, name, fn in BENCHMARKS:
+            print(f"\n>>> Benchmark: {name} ({key})")
+            worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+                raw_cat = list(executor.map(_worker_catcmawm_seed, worker_args))
+            raw_cat.sort(key=lambda item: item[0])
+            res_dict = {item[0]: item[1] for item in raw_cat}
+            trace_mat = np.array([item[2] for item in raw_cat], dtype=np.float64)
+            catcmawm_traces[key] = trace_mat
+
+            values = [res_dict[s] for s in SEEDS]
+            per_seed = {str(s): res_dict[s] for s in SEEDS}
+            vals_arr = np.array(values, dtype=np.float64)
+            catcmawm_results[key] = _calc_stats(vals_arr, per_seed)
+            print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
+        print(f"\nCatCMAwM completed in {time.time() - t2:.2f} seconds.")
+
+    # 4. Save to JSON
     combined_results = {
         "random_search": rs_results,
         "cma_es_relaxation": cma_results if HAS_CMA else None,
+        "catcmawm": catcmawm_results if HAS_CATCMAWM else None,
         # Direct aliases for standard access:
         "sphere": rs_results["sphere"],
         "coupled": rs_results["coupled"],
@@ -323,38 +492,50 @@ def main():
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(combined_results, f, indent=2)
 
-    # Save compact .npz arrays
+    # 5. Save full traces to .npz
     save_dict = {"seeds": np.array(SEEDS, dtype=np.int64)}
     for key, _, _ in BENCHMARKS:
         save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
+        save_dict[f"{key}__rs_traces"] = rs_traces[key]
         if HAS_CMA:
             save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
+            save_dict[f"{key}__cma_traces"] = cma_traces[key]
+        if HAS_CATCMAWM:
+            save_dict[f"catcmawm_{key}"] = np.array([catcmawm_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
+            save_dict[f"{key}__catcmawm_traces"] = catcmawm_traces[key]
+
     np.savez_compressed(npz_path, **save_dict)
 
     print(f"\n[OK] Results successfully saved to: {results_path}")
     print(f"[OK] NumPy arrays successfully saved to: {npz_path}")
 
-    # 4. Summary Table Output
-    print("\n" + "=" * 70)
-    print(f" SUMMARY TABLE: RANDOM SEARCH & CMA-ES RELAXATION ({len(SEEDS)} SEEDS, 20,000 EVALS)")
-    print("=" * 70)
-    print(f"{'Benchmark':<24} | {'Metric':<10} | {'Random Search':<16} | {'CMA-ES (Relaxed)':<16}")
-    print("-" * 70)
+    # 6. Summary Table Output
+    print("\n" + "=" * 95)
+    print(f" SUMMARY TABLE: EXTERNAL BASELINES ({len(SEEDS)} SEEDS, {MAX_EVALS:,} EVALS)")
+    print("=" * 95)
+    print(f"{'Benchmark':<24} | {'Metric':<10} | {'Random Search':<16} | {'CMA-ES (Relaxed)':<16} | {'CatCMAwM (2025)':<16}")
+    print("-" * 95)
     for key, name, _ in BENCHMARKS:
         rs_min = f"{rs_results[key]['min']:.4e}"
+        rs_med = f"{rs_results[key]['median']:.4e}"
         rs_mean = f"{rs_results[key]['mean']:.4e}"
-        rs_std = f"{rs_results[key]['std']:.4e}"
-        if HAS_CMA:
-            cma_min = f"{cma_results[key]['min']:.4e}"
-            cma_mean = f"{cma_results[key]['mean']:.4e}"
-            cma_std = f"{cma_results[key]['std']:.4e}"
-        else:
-            cma_min = cma_mean = cma_std = "N/A"
-            
-        print(f"{name:<24} | {'Best (Min)':<10} | {rs_min:<16} | {cma_min:<16}")
-        print(f"{'':<24} | {'Mean':<10} | {rs_mean:<16} | {cma_mean:<16}")
-        print(f"{'':<24} | {'Std':<10} | {rs_std:<16} | {cma_std:<16}")
-        print("-" * 70)
+        rs_iqr = f"{rs_results[key]['iqr']:.4e}"
+
+        cma_min = f"{cma_results[key]['min']:.4e}" if HAS_CMA else "N/A"
+        cma_med = f"{cma_results[key]['median']:.4e}" if HAS_CMA else "N/A"
+        cma_mean = f"{cma_results[key]['mean']:.4e}" if HAS_CMA else "N/A"
+        cma_iqr = f"{cma_results[key]['iqr']:.4e}" if HAS_CMA else "N/A"
+
+        cat_min = f"{catcmawm_results[key]['min']:.4e}" if HAS_CATCMAWM else "N/A"
+        cat_med = f"{catcmawm_results[key]['median']:.4e}" if HAS_CATCMAWM else "N/A"
+        cat_mean = f"{catcmawm_results[key]['mean']:.4e}" if HAS_CATCMAWM else "N/A"
+        cat_iqr = f"{catcmawm_results[key]['iqr']:.4e}" if HAS_CATCMAWM else "N/A"
+
+        print(f"{name:<24} | {'Best (Min)':<10} | {rs_min:<16} | {cma_min:<16} | {cat_min:<16}")
+        print(f"{'':<24} | {'Median':<10} | {rs_med:<16} | {cma_med:<16} | {cat_med:<16}")
+        print(f"{'':<24} | {'IQR':<10} | {rs_iqr:<16} | {cma_iqr:<16} | {cat_iqr:<16}")
+        print(f"{'':<24} | {'Mean':<10} | {rs_mean:<16} | {cma_mean:<16} | {cat_mean:<16}")
+        print("-" * 95)
 
 
 if __name__ == "__main__":
