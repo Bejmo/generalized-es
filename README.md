@@ -67,7 +67,7 @@ From the project root:
 uv sync
 ```
 
-This single command automatically resolves Python 3.12, creates `.venv`, installs all dependencies (`numpy`, `matplotlib`, `cma`, `pymoo`, `pytest`, `ipykernel`), and registers the console scripts `es-model` and `generalized-es`.
+This single command automatically resolves Python 3.12, creates `.venv`, installs all dependencies (`numpy`, `matplotlib`, `cma`, `cmaes`, `scipy`, `pandas`, `pymoo`, `pytest`, `ipykernel`), and registers the console scripts `es-model` and `generalized-es`.
 
 ---
 
