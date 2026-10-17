@@ -13,11 +13,80 @@ try:
 except ImportError:
     pd = None
 
+import concurrent.futures
 from src.es_model.config import ESConfig
 from src.es_model.individual import Individual, unpack_genome
 from src.es_model.generalized_es import GeneralizedES
 from src.runners.custom_es import run as run_generalized_es
-from src.benchmarks.generalized_functions import get_default_targets
+from src.benchmarks.generalized_functions import get_default_targets, GENERALIZED_BENCHMARKS
+
+
+def _eval_bench_seed_worker(args: Tuple[str, ESConfig, int, int]) -> Tuple[int, np.ndarray]:
+    """Top-level picklable worker for multi-seed benchmark traces."""
+    bench_name, config, seed, max_evals = args
+    fn = GENERALIZED_BENCHMARKS[bench_name]["fn"]
+    eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
+    trace = run_generalized_es(
+        fn=eval_fn,
+        dim=config.n_real,
+        bounds=(config.lower_bound_real, config.upper_bound_real),
+        seed=seed,
+        max_evals=max_evals,
+        config=config,
+    )
+    return seed, trace
+
+
+def _dynamics_seed_worker(args: Tuple[str, ESConfig, int, int]) -> Tuple[int, Dict[str, np.ndarray]]:
+    """Top-level picklable worker for multi-seed strategy dynamics tracking."""
+    bench_name, config, seed, max_evals = args
+    fn = GENERALIZED_BENCHMARKS[bench_name]["fn"]
+    eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
+    n_generations = max_evals // config.lam
+
+    es = GeneralizedES(config=config, seed=seed)
+    es.init_population(eval_fn)
+    history: Dict[str, List[float]] = {
+        "sigma_real": [],
+        "lambda_count": [],
+        "sigma_fuzzy": [],
+        "lambda_circular": [],
+        "p_flip_binary": [],
+        "cat_confidence": [],
+        "cat_entropy_norm": [],
+        "cost_real": [],
+        "cost_count": [],
+        "cost_binary": [],
+        "cost_cat": [],
+        "cost_fuzzy": [],
+        "cost_circular": [],
+    }
+
+    for _ in range(n_generations):
+        es.step(eval_fn)
+        best_p = es.parents[0]
+        history["sigma_real"].append(float(np.mean(best_p.sigma_real)))
+        history["lambda_count"].append(float(np.mean(best_p.lambda_count)))
+        history["sigma_fuzzy"].append(float(np.mean(best_p.sigma_fuzzy)))
+        history["lambda_circular"].append(float(np.mean(best_p.lambda_circular)))
+
+        p_flips = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_binary, -700.0, 700.0)))
+        history["p_flip_binary"].append(float(np.mean(p_flips)))
+
+        p_mut_cat = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_cat, -700.0, 700.0)))
+        history["cat_confidence"].append(float(np.mean(1.0 - p_mut_cat)) if len(p_mut_cat) > 0 else 0.0)
+        if len(p_mut_cat) > 0:
+            p_c = np.clip(p_mut_cat, 1e-12, 1.0 - 1e-12)
+            h_cat = -(p_c * np.log2(p_c) + (1.0 - p_c) * np.log2(1.0 - p_c))
+            history["cat_entropy_norm"].append(float(np.mean(h_cat)))
+        else:
+            history["cat_entropy_norm"].append(0.0)
+
+        decomp = compute_heterogeneous_decomposition(best_p, bench_name, config)
+        for k_cost, v_cost in decomp.items():
+            history[k_cost].append(v_cost)
+
+    return seed, {k: np.array(v) for k, v in history.items()}
 
 
 def compute_heterogeneous_decomposition(
@@ -83,53 +152,44 @@ def run_heterogeneous_benchmark_suite(
     seeds: List[int],
     max_evals: int,
     data_dir: Optional[str] = None,
+    max_workers: int = 8,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Run multi-seed optimization across all synthetic generalized benchmarks.
-
-    Parameters
-    ----------
-    benchmarks : dict
-        Mapping of benchmark names to benchmark dictionary with 'fn' and 'description'.
-    config : ESConfig
-        Genome configuration and hyperparameter settings.
-    seeds : list of int
-        Random seeds for statistical replication.
-    max_evals : int
-        Maximum fitness evaluations per optimization run.
-    data_dir : str, optional
-        Path to save 'exp3_traces.npz' if provided.
-
-    Returns
-    -------
-    dict
-        Aggregated results per benchmark containing mean, std, min, max, and all traces.
     """
     results: Dict[str, Dict[str, Any]] = {}
     n_seeds = len(seeds)
 
     for bench_name, bench_info in benchmarks.items():
         print(f"\n==========================================")
-        print(f" Running Benchmark: {bench_name}")
+        print(f" Running Benchmark: {bench_name} ({n_seeds} Seeds)")
         print(f" {bench_info.get('description', '')}")
         print(f"==========================================")
 
-        fn = bench_info["fn"]
-        eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
+        if max_workers > 1 and n_seeds > 1:
+            worker_args = [(bench_name, config, seed, max_evals) for seed in seeds]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                raw_results = list(executor.map(_eval_bench_seed_worker, worker_args))
+            res_dict = dict(raw_results)
+            seed_traces = [res_dict[s] for s in seeds]
+        else:
+            fn = bench_info["fn"]
+            eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
+            seed_traces = []
+            for seed in seeds:
+                trace = run_generalized_es(
+                    fn=eval_fn,
+                    dim=config.n_real,
+                    bounds=(config.lower_bound_real, config.upper_bound_real),
+                    seed=seed,
+                    max_evals=max_evals,
+                    config=config,
+                )
+                seed_traces.append(trace)
 
-        seed_traces = []
-        for idx, seed in enumerate(seeds):
-            trace = run_generalized_es(
-                fn=eval_fn,
-                dim=config.n_real,
-                bounds=(config.lower_bound_real, config.upper_bound_real),
-                seed=seed,
-                max_evals=max_evals,
-                config=config,
-            )
-            seed_traces.append(trace)
+        for idx, (s, tr) in enumerate(zip(seeds, seed_traces)):
             if (idx + 1) % max(1, n_seeds // 5) == 0 or idx == n_seeds - 1:
-                print(f"  Seed {seed:5d} ({idx+1:2d}/{n_seeds}) | Final Best Fitness: {trace[-1]:.6e}")
+                print(f"  Seed {s:5d} ({idx+1:2d}/{n_seeds}) | Final Best Fitness: {tr[-1]:.6e}")
 
         traces_arr = np.array(seed_traces)
         results[bench_name] = {
@@ -160,84 +220,33 @@ def run_heterogeneous_dynamics_tracking(
     seeds: List[int],
     max_evals: int,
     data_dir: Optional[str] = None,
+    max_workers: int = 8,
 ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, np.ndarray]]]:
     """
     Execute generation-by-generation tracking of strategy parameters, mutation intensities,
     categorical certainty metrics, and partial fitness decompositions across multiple seeds.
-
-    Parameters
-    ----------
-    benchmarks : dict
-        Mapping of benchmark names to benchmark dictionary.
-    config : ESConfig
-        Genome configuration.
-    seeds : list of int
-        Random seeds for evaluation.
-    max_evals : int
-        Maximum evaluations per run.
-    data_dir : str, optional
-        Path to save 'exp3_strategy_dynamics.npz'.
-
-    Returns
-    -------
-    tuple of (all_saved_data, bench_dynamics)
-        all_saved_data: Dict with all means, stds, raw arrays, generations, and seeds.
-        bench_dynamics: Dict mapping benchmark name to aggregated mean and std metrics.
     """
     n_generations = max_evals // config.lam
     all_saved_data: Dict[str, Any] = {}
     bench_dynamics: Dict[str, Dict[str, np.ndarray]] = {}
+    n_seeds = len(seeds)
 
     for bench_name, bench_info in benchmarks.items():
-        print(f">>> Tracking Heterogeneous Dynamics: {bench_name} ({len(seeds)} Seeds)")
-        fn = bench_info["fn"]
-        eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
-        seed_data: List[Dict[str, np.ndarray]] = []
+        print(f">>> Tracking Heterogeneous Dynamics: {bench_name} ({n_seeds} Seeds)")
 
-        for seed in seeds:
-            es = GeneralizedES(config=config, seed=seed)
-            es.init_population(eval_fn)
-            history: Dict[str, List[float]] = {
-                "sigma_real": [],
-                "lambda_count": [],
-                "sigma_fuzzy": [],
-                "lambda_circular": [],
-                "p_flip_binary": [],
-                "cat_confidence": [],
-                "cat_entropy_norm": [],
-                "cost_real": [],
-                "cost_count": [],
-                "cost_binary": [],
-                "cost_cat": [],
-                "cost_fuzzy": [],
-                "cost_circular": [],
-            }
-
-            for _ in range(n_generations):
-                es.step(eval_fn)
-                best_p = es.parents[0]
-                history["sigma_real"].append(float(np.mean(best_p.sigma_real)))
-                history["lambda_count"].append(float(np.mean(best_p.lambda_count)))
-                history["sigma_fuzzy"].append(float(np.mean(best_p.sigma_fuzzy)))
-                history["lambda_circular"].append(float(np.mean(best_p.lambda_circular)))
-
-                p_flips = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_binary, -700.0, 700.0)))
-                history["p_flip_binary"].append(float(np.mean(p_flips)))
-
-                p_mut_cat = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_cat, -700.0, 700.0)))
-                history["cat_confidence"].append(float(np.mean(1.0 - p_mut_cat)) if len(p_mut_cat) > 0 else 0.0)
-                if len(p_mut_cat) > 0:
-                    p_c = np.clip(p_mut_cat, 1e-12, 1.0 - 1e-12)
-                    h_cat = -(p_c * np.log2(p_c) + (1.0 - p_c) * np.log2(1.0 - p_c))
-                    history["cat_entropy_norm"].append(float(np.mean(h_cat)))
-                else:
-                    history["cat_entropy_norm"].append(0.0)
-
-                decomp = compute_heterogeneous_decomposition(best_p, bench_name, config)
-                for k_cost, v_cost in decomp.items():
-                    history[k_cost].append(v_cost)
-
-            seed_data.append({k: np.array(v) for k, v in history.items()})
+        if max_workers > 1 and n_seeds > 1:
+            worker_args = [(bench_name, config, seed, max_evals) for seed in seeds]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                raw_results = list(executor.map(_dynamics_seed_worker, worker_args))
+            res_dict = dict(raw_results)
+            seed_data = [res_dict[s] for s in seeds]
+        else:
+            fn = bench_info["fn"]
+            eval_fn = lambda ind_or_x, _fn=fn: _fn(ind_or_x, config=config)
+            seed_data = []
+            for seed in seeds:
+                _, s_dict = _dynamics_seed_worker((bench_name, config, seed, max_evals))
+                seed_data.append(s_dict)
 
         bench_agg: Dict[str, np.ndarray] = {}
         for m in seed_data[0].keys():
@@ -251,7 +260,7 @@ def run_heterogeneous_dynamics_tracking(
         bench_dynamics[bench_name] = bench_agg
 
     all_saved_data["generations"] = np.arange(n_generations)
-    all_saved_data["seeds"] = np.array(seeds)
+    all_saved_data["seeds"] = np.array(seeds, dtype=np.int64)
 
     if data_dir is not None:
         os.makedirs(data_dir, exist_ok=True)

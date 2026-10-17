@@ -71,7 +71,11 @@ def compute_wilcoxon_table_exp3(
         ("Generalized_Rastrigin", "rastrigin", "Heterogeneous Rastrigin"),
     ]
 
-    seeds = [42, 143, 244, 345, 446, 547, 648, 749, 850, 951]
+    if "seeds" in data3:
+        seeds = [int(s) for s in data3["seeds"]]
+    else:
+        seeds = [int(s) for s in base_data["random_search"]["sphere"]["per_seed"].keys()]
+
     results = {}
 
     for bench_key, json_key, bench_name in benchmarks:
@@ -81,8 +85,10 @@ def compute_wilcoxon_table_exp3(
         rs_dict = base_data["random_search"][json_key]["per_seed"]
         cma_dict = base_data["cma_es_relaxation"][json_key]["per_seed"]
 
-        rs_final = np.array([rs_dict[str(s)] for s in seeds])
-        cma_final = np.array([cma_dict[str(s)] for s in seeds])
+        common_seeds = [s for s in seeds if str(s) in rs_dict and str(s) in cma_dict]
+        rs_final = np.array([rs_dict[str(s)] for s in common_seeds])
+        cma_final = np.array([cma_dict[str(s)] for s in common_seeds])
+        prop_sub = prop_final[:len(common_seeds)]
 
         opponents = [
             ("Random Search", rs_final),
@@ -93,10 +99,10 @@ def compute_wilcoxon_table_exp3(
         raw_p_list = []
 
         for opp_label, opp_final in opponents:
-            n_cmp = min(len(prop_final), len(opp_final))
+            n_cmp = min(len(prop_sub), len(opp_final))
             if n_cmp < 3:
                 continue
-            p_sub = prop_final[:n_cmp]
+            p_sub = prop_sub[:n_cmp]
             o_sub = opp_final[:n_cmp]
             diff = p_sub - o_sub
             wins = int(np.sum(diff < 0))
@@ -117,8 +123,8 @@ def compute_wilcoxon_table_exp3(
             bench_records.append({
                 "benchmark": bench_name,
                 "opponent": opp_label,
-                "prop_mean": float(np.mean(prop_final)),
-                "opp_mean": float(np.mean(opp_final)),
+                "prop_mean": float(np.mean(p_sub)),
+                "opp_mean": float(np.mean(o_sub)),
                 "wins": wins,
                 "ties": ties,
                 "losses": losses,
@@ -143,7 +149,8 @@ def compute_wilcoxon_table_exp3(
 def main():
     parser = argparse.ArgumentParser(description="Run Experiment 3: Heterogeneous Benchmarks")
     parser.add_argument("--max-evals", type=int, default=20000)
-    parser.add_argument("--n-seeds", type=int, default=10)
+    parser.add_argument("--n-seeds", type=int, default=40)
+    parser.add_argument("--max-workers", type=int, default=8)
     parser.add_argument("--output-dir", type=str, default="experiments/experiment_3")
     args = parser.parse_args()
 
@@ -154,23 +161,27 @@ def main():
     os.makedirs(fig_dir, exist_ok=True)
 
     config = ESConfig(
-        n_real=10,
-        n_count=5,
-        n_binary=16,
-        n_categorical=3,
+        mu=15,
+        lam=100,
+        n_real=5,
+        n_count=3,
+        n_binary=4,
+        n_categorical=2,
+        categorical_k=np.array([3, 4], dtype=np.int64),
         n_fuzzy=2,
         n_circular=2,
-        categorical_k=np.array([4, 6, 8], dtype=np.int64),
-        circular_k=np.array([12, 24], dtype=np.int64),
+        circular_k=np.array([7, 12], dtype=np.int64),
+        seed=42,
     )
 
-    print("Running heterogeneous benchmark suite...")
+    print(f"Running heterogeneous benchmark suite ({args.n_seeds} seeds, max_evals={args.max_evals})...")
     results = run_heterogeneous_benchmark_suite(
         benchmarks=GENERALIZED_BENCHMARKS,
         config=config,
         max_evals=args.max_evals,
         seeds=seeds,
         data_dir=data_dir,
+        max_workers=args.max_workers,
     )
 
     plot_heterogeneous_convergence(
@@ -181,13 +192,34 @@ def main():
         save_dir=fig_dir,
         show=False,
     )
-    print(f"Results and figures saved to {args.output_dir}")
+
+    print(f"\nRunning heterogeneous strategy dynamics tracking ({args.n_seeds} seeds)...")
+    all_saved_data, bench_dynamics = run_heterogeneous_dynamics_tracking(
+        benchmarks=GENERALIZED_BENCHMARKS,
+        config=config,
+        seeds=seeds,
+        max_evals=args.max_evals,
+        data_dir=data_dir,
+        max_workers=args.max_workers,
+    )
+
+    for bench_name, b_agg in bench_dynamics.items():
+        plot_heterogeneous_dynamics(
+            bench_name=bench_name,
+            bench_agg=b_agg,
+            n_generations=args.max_evals // config.lam,
+            n_seeds=args.n_seeds,
+            save_dir=fig_dir,
+            show=False,
+        )
+
+    print(f"\nAll results and figures saved to {args.output_dir}")
 
     # Print Wilcoxon tests if baselines exist
     baseline_file = os.path.join(data_dir, "random_search_results.json")
     traces_file = os.path.join(data_dir, "exp3_traces.npz")
     if os.path.exists(baseline_file) and os.path.exists(traces_file):
-        print("\n--- Statistical Hypothesis Testing vs. External Baselines (Table 5.3) ---")
+        print(f"\n--- Statistical Hypothesis Testing vs. External Baselines ({args.n_seeds} Seeds) ---")
         tests_exp3 = compute_wilcoxon_table_exp3(traces_file, baseline_file)
         for bench_name, records in tests_exp3.items():
             for r in records:

@@ -71,7 +71,7 @@ CONFIG = ESConfig(
     seed=42,
 )
 
-SEEDS = [42, 143, 244, 345, 446, 547, 648, 749, 850, 951]
+SEEDS = [42 + i * 101 for i in range(40)]
 MAX_EVALS = 20000
 
 # Benchmark mappings
@@ -207,7 +207,27 @@ def run_cma_es_seed(
     return best_fitness
 
 
+def _worker_rs_seed(args: Tuple[str, int, int]) -> Tuple[int, float]:
+    bench_key, seed, max_evals = args
+    bench_dict = {k: fn for k, _, fn in BENCHMARKS}
+    fn = bench_dict[bench_key]
+    targets = get_default_targets(CONFIG)
+    f_best = run_random_search_seed(fn, seed, max_evals, targets)
+    return seed, f_best
+
+
+def _worker_cma_seed(args: Tuple[str, int, int]) -> Tuple[int, float]:
+    bench_key, seed, max_evals = args
+    bench_dict = {k: fn for k, _, fn in BENCHMARKS}
+    fn = bench_dict[bench_key]
+    targets = get_default_targets(CONFIG)
+    f_best = run_cma_es_seed(fn, seed, max_evals, targets)
+    return seed, f_best
+
+
 def main():
+    import concurrent.futures
+
     print("=" * 70)
     print(" EXPERIMENT 3 (A7) EXTERNAL BASELINE RUNNER")
     print(f" Config: 20D Heterogeneous Phenotype (5R, 3C, 4B, 2Cat, 2Fuz, 2Circ)")
@@ -216,7 +236,7 @@ def main():
     print("=" * 70)
 
     targets = get_default_targets(CONFIG)
-    output_dir = PROJECT_ROOT / "experiments" / "data" / "experiment_3"
+    output_dir = PROJECT_ROOT / "experiments" / "experiment_3" / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "random_search_results.json"
     npz_path = output_dir / "random_search_baselines.npz"
@@ -229,13 +249,14 @@ def main():
     t0 = time.time()
     for key, name, fn in BENCHMARKS:
         print(f"\n>>> Benchmark: {name} ({key})")
-        per_seed = {}
-        values = []
+        worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+        with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+            raw_rs = list(executor.map(_worker_rs_seed, worker_args))
+        res_dict = dict(raw_rs)
+        values = [res_dict[s] for s in SEEDS]
+        per_seed = {str(s): res_dict[s] for s in SEEDS}
         for s in SEEDS:
-            f_best = run_random_search_seed(fn, s, MAX_EVALS, targets)
-            per_seed[str(s)] = f_best
-            values.append(f_best)
-            print(f"  Seed {s:4d} | Best Fitness: {f_best:12.6f}")
+            print(f"  Seed {s:4d} | Best Fitness: {res_dict[s]:12.6f}")
 
         vals_arr = np.array(values, dtype=np.float64)
         rs_results[key] = {
@@ -255,13 +276,14 @@ def main():
         t1 = time.time()
         for key, name, fn in BENCHMARKS:
             print(f"\n>>> Benchmark: {name} ({key})")
-            per_seed = {}
-            values = []
+            worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+                raw_cma = list(executor.map(_worker_cma_seed, worker_args))
+            res_dict = dict(raw_cma)
+            values = [res_dict[s] for s in SEEDS]
+            per_seed = {str(s): res_dict[s] for s in SEEDS}
             for s in SEEDS:
-                f_best = run_cma_es_seed(fn, s, MAX_EVALS, targets)
-                per_seed[str(s)] = f_best
-                values.append(f_best)
-                print(f"  Seed {s:4d} | Best Fitness: {f_best:12.6f}")
+                print(f"  Seed {s:4d} | Best Fitness: {res_dict[s]:12.6f}")
 
             vals_arr = np.array(values, dtype=np.float64)
             cma_results[key] = {
@@ -302,11 +324,11 @@ def main():
         json.dump(combined_results, f, indent=2)
 
     # Save compact .npz arrays
-    save_dict = {"seeds": np.array(SEEDS)}
+    save_dict = {"seeds": np.array(SEEDS, dtype=np.int64)}
     for key, _, _ in BENCHMARKS:
-        save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][s] for s in SEEDS], dtype=np.float64)
+        save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
         if HAS_CMA:
-            save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][s] for s in SEEDS], dtype=np.float64)
+            save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
     np.savez_compressed(npz_path, **save_dict)
 
     print(f"\n[OK] Results successfully saved to: {results_path}")
@@ -314,7 +336,7 @@ def main():
 
     # 4. Summary Table Output
     print("\n" + "=" * 70)
-    print(" SUMMARY TABLE: RANDOM SEARCH & CMA-ES RELAXATION (10 SEEDS, 20,000 EVALS)")
+    print(f" SUMMARY TABLE: RANDOM SEARCH & CMA-ES RELAXATION ({len(SEEDS)} SEEDS, 20,000 EVALS)")
     print("=" * 70)
     print(f"{'Benchmark':<24} | {'Metric':<10} | {'Random Search':<16} | {'CMA-ES (Relaxed)':<16}")
     print("-" * 70)

@@ -5,11 +5,24 @@ plotting.py: Visualization routines for Experiment 3 (Heterogeneous Benchmarks).
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Dict, List, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 
 from src.es_model.config import ESConfig
+
+
+def _safe_savefig(fig: plt.Figure, path: str, **kwargs) -> None:
+    """Save figure with retries to handle transient Windows file locks."""
+    for attempt in range(5):
+        try:
+            fig.savefig(path, **kwargs)
+            return
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(0.3)
 
 
 def plot_heterogeneous_convergence(
@@ -62,7 +75,7 @@ def plot_heterogeneous_convergence(
         if save_dir is not None:
             os.makedirs(save_dir, exist_ok=True)
             fig_path = os.path.join(save_dir, f"exp3_{bench_name.lower()}_convergence.png")
-            fig.savefig(fig_path, dpi=200, bbox_inches="tight")
+            _safe_savefig(fig, fig_path, dpi=200, bbox_inches="tight")
             print(f"Saved separate convergence figure: {fig_path}")
         if show:
             plt.show()
@@ -161,7 +174,7 @@ def plot_heterogeneous_dynamics(
     plt.tight_layout()
     if save_dir is not None:
         path_a = os.path.join(save_dir, f"exp3_{bench_name.lower()}_step_sizes.png")
-        fig_a.savefig(path_a, dpi=200, bbox_inches="tight")
+        _safe_savefig(fig_a, path_a, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_a}")
     if show:
         plt.show()
@@ -184,7 +197,7 @@ def plot_heterogeneous_dynamics(
     plt.tight_layout()
     if save_dir is not None:
         path_b = os.path.join(save_dir, f"exp3_{bench_name.lower()}_probabilities.png")
-        fig_b.savefig(path_b, dpi=200, bbox_inches="tight")
+        _safe_savefig(fig_b, path_b, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_b}")
     if show:
         plt.show()
@@ -206,7 +219,7 @@ def plot_heterogeneous_dynamics(
     plt.tight_layout()
     if save_dir is not None:
         path_c = os.path.join(save_dir, f"exp3_{bench_name.lower()}_decomposition.png")
-        fig_c.savefig(path_c, dpi=200, bbox_inches="tight")
+        _safe_savefig(fig_c, path_c, dpi=200, bbox_inches="tight")
         print(f"  Saved: {path_c}")
     if show:
         plt.show()
