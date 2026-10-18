@@ -108,8 +108,8 @@ uv run es-model benchmarks --dim 20 --max-evals 50000 --seeds 5
 In-depth empirical notebooks are available under [`experiments/`](experiments):
 
 * [`experiment_1.ipynb`](experiments/experiment_1.ipynb): Equal-budget continuous benchmark comparisons against CMA-ES and Isotropic ES.
-* [`experiment_2.ipynb`](experiments/experiment_2.ipynb): Dynamic Target Shift (DTS) tracking and mutation self-adaptation across all 6 variable types in isolation.
-* [`experiment_3.ipynb`](experiments/experiment_3.ipynb): Simultaneous co-evolution across all 6 variable types on synthetic heterogeneous landscapes, including 4-way baseline comparisons against Uniform Random Search, Continuous Relaxation CMA-ES with rounding, and State-of-the-Art CatCMA with Margin (CatCMAwM, 2025).
+* [`experiment_2.ipynb`](experiments/experiment_2.ipynb): Target Shift (TS) tracking and mutation self-adaptation across all 6 variable types in isolation.
+* [`experiment_3.ipynb`](experiments/experiment_3.ipynb): Simultaneous co-evolution across all 6 variable types on synthetic heterogeneous landscapes (*Sphere*, *Coupled*, *Rastrigin*, *Multiplicative*), including 4-way baseline comparisons against Uniform Random Search, Continuous Relaxation CMA-ES with rounding, and State-of-the-Art CatCMA with Margin (CatCMAwM, 2025).
 
 To launch a Jupyter session:
 

@@ -131,7 +131,7 @@ TFG/
     ├── experiment_1/                                       #     Continuous benchmarks vs. isotropic/sep/standard CMA-ES
     │   ├── experiment_1.ipynb                              #       Analysis notebook & figures
     │   └── runners/run_experiment_1.py                     #       Execution & statistical testing runner
-    ├── experiment_2/                                       #     Dynamic Target Shift (DTS) transversal dynamic tracking
+    ├── experiment_2/                                       #     Target Shift (TS) transversal dynamic tracking
     │   ├── experiment_2.ipynb                              #       Analysis notebook & transversal dynamic tracking
     │   └── runners/                                        #       Execution and plotting scripts
     ├── experiment_3/                                       #     Heterogeneous mixed-variable benchmarks (4-way comparison)
@@ -192,7 +192,7 @@ flowchart TD
 | `src.es_model.individual` | Candidate solution representation, discrete recombination & genome extraction | `Individual`, `UnpackedGenome`, `unpack_genome` | `config`, `variables` | `generalized_es`, `main`, `benchmarks`, `tests` |
 | `src.es_model.generalized_es` | Stateful optimization engine and $(\mu, \lambda) / (\mu + \lambda)$ survivor selection | `GeneralizedES`, `select_survivors` | `config`, `individual` | `main`, `runners.custom_es`, `tests` |
 | `src.benchmarks.functions` | Standard continuous optimization landscapes | `BENCHMARKS` (`Sphere`, `Rastrigin`, `Rosenbrock`, `Ackley`) | None | `main`, `runners`, `tests` |
-| `src.benchmarks.generalized_functions` | Synthetic mixed-variable test landscapes across all 6 domain types | `sphere_generalized`, `rastrigin_generalized`, `coupled_generalized` | `config`, `individual` | `experiments`, `tests` |
+| `src.benchmarks.generalized_functions` | Synthetic mixed-variable test landscapes across all 6 domain types | `generalized_sphere`, `generalized_rastrigin`, `generalized_coupled`, `generalized_multiplicative` | `config`, `individual` | `experiments`, `tests` |
 | `src.runners.*` | Optimizer execution adapters and baseline wrappers | `custom_es.run`, `isotropic_es.run`, `sep_cma_es.run`, `standard_cma_es.run` | `generalized_es`, `config` | `main` |
 | `src.es_model.main` | Unified CLI parser, interactive menu & workflow orchestrator | `main`, `run_model`, `run_benchmarks` | `config`, `generalized_es`, `benchmarks`, `runners` | CLI entrypoints (`es-model`, `generalized-es`) |
 | `experiments.experiment_3.runners.run_exp3_baselines` | External heterogeneous baselines runner (RS, CMA-ES with Rounding, CatCMAwM) | `RandomSearchRunner`, `CMARoundingRunner`, `CatCMAwMRunner`, `run_all_baselines` | `benchmarks.generalized_functions`, `config` | `run_experiment_3`, `tests.test_catcmawm_baseline` |
