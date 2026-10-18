@@ -10,6 +10,7 @@ Evaluates on:
 - Generalized Sphere (convex, separable)
 - Generalized Coupled (discrete regime switches)
 - Generalized Rastrigin (multimodal, non-convex)
+- Generalized Multiplicative (non-separable multiplicative epistasis)
 
 Saves results to:
 - experiments/experiment_3/data/random_search_results.json
@@ -28,6 +29,7 @@ for parent in [Path.cwd().resolve()] + list(Path(__file__).resolve().parents):
             sys.path.insert(0, str(parent))
         break
 
+import argparse
 import concurrent.futures
 import json
 import os
@@ -46,6 +48,7 @@ from src.benchmarks.generalized_functions import (
     generalized_sphere,
     generalized_rastrigin,
     generalized_coupled,
+    generalized_multiplicative,
     get_default_targets,
 )
 
@@ -85,6 +88,7 @@ BENCHMARKS = [
     ("sphere", "Generalized Sphere", generalized_sphere),
     ("coupled", "Generalized Coupled", generalized_coupled),
     ("rastrigin", "Generalized Rastrigin", generalized_rastrigin),
+    ("multiplicative", "Generalized Multiplicative", generalized_multiplicative),
 ]
 
 # Continuous relaxation bounds for CMA-ES (20 dimensions)
@@ -380,10 +384,19 @@ def _calc_stats(vals: np.ndarray, per_seed_dict: Dict[str, float]) -> Dict[str, 
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Experiment 3 External Baselines Runner")
+    parser.add_argument("--force-all", action="store_true", help="Force recomputation of all benchmarks")
+    parser.add_argument("--max-evals", type=int, default=MAX_EVALS, help="Budget per seed")
+    parser.add_argument("--n-seeds", type=int, default=len(SEEDS), help="Number of seeds")
+    args = parser.parse_args()
+
+    max_evals = args.max_evals
+    seeds = SEEDS[:args.n_seeds]
+
     print("=" * 70)
     print(" EXPERIMENT 3 EXTERNAL BASELINE RUNNER (4 METHODS)")
     print(f" Config: 20D Heterogeneous Phenotype (5R, 3C, 4B, 2Cat, 2Fuz, 2Circ)")
-    print(f" Budget: {MAX_EVALS:,} evaluations | Seeds: {len(SEEDS)} seeds")
+    print(f" Budget: {max_evals:,} evaluations | Seeds: {len(seeds)} seeds")
     print(f" CMA-ES available: {HAS_CMA} | CatCMAwM available: {HAS_CATCMAWM}")
     print("=" * 70)
 
@@ -400,12 +413,35 @@ def main():
     cma_traces: Dict[str, np.ndarray] = {}
     catcmawm_traces: Dict[str, np.ndarray] = {}
 
+    # Load existing if available and not force-all
+    if not args.force_all and npz_path.exists() and results_path.exists():
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                prev_json = json.load(f)
+            prev_npz = np.load(npz_path, allow_pickle=True)
+            rs_results = prev_json.get("random_search", {})
+            cma_results = prev_json.get("cma_es_relaxation", {}) or {}
+            catcmawm_results = prev_json.get("catcmawm", {}) or {}
+            for k, _, _ in BENCHMARKS:
+                if f"{k}__rs_traces" in prev_npz:
+                    rs_traces[k] = prev_npz[f"{k}__rs_traces"]
+                if f"{k}__cma_traces" in prev_npz:
+                    cma_traces[k] = prev_npz[f"{k}__cma_traces"]
+                if f"{k}__catcmawm_traces" in prev_npz:
+                    catcmawm_traces[k] = prev_npz[f"{k}__catcmawm_traces"]
+            print(f"Loaded existing precomputed baselines for: {list(rs_traces.keys())}")
+        except Exception as e:
+            print(f"Notice: Could not load previous baseline cache ({e}), starting fresh.")
+
     # 1. Random Search Evaluation
     print("\n[1/3] RUNNING UNIFORM RANDOM SEARCH...")
     t0 = time.time()
     for key, name, fn in BENCHMARKS:
+        if key in rs_traces and not args.force_all:
+            print(f"Skipping {name} ({key}) - already present in precomputed baselines.")
+            continue
         print(f"\n>>> Benchmark: {name} ({key})")
-        worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+        worker_args = [(key, s, max_evals) for s in seeds]
         with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
             raw_rs = list(executor.map(_worker_rs_seed, worker_args))
         # raw_rs is list of (seed, f_best, trace)
@@ -414,21 +450,24 @@ def main():
         trace_mat = np.array([item[2] for item in raw_rs], dtype=np.float64)
         rs_traces[key] = trace_mat
 
-        values = [res_dict[s] for s in SEEDS]
-        per_seed = {str(s): res_dict[s] for s in SEEDS}
+        values = [res_dict[s] for s in seeds]
+        per_seed = {str(s): res_dict[s] for s in seeds}
         vals_arr = np.array(values, dtype=np.float64)
         rs_results[key] = _calc_stats(vals_arr, per_seed)
         print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
 
-    print(f"\nRandom Search completed in {time.time() - t0:.2f} seconds.")
+    print(f"\nRandom Search step finished in {time.time() - t0:.2f} seconds.")
 
     # 2. Standard CMA-ES Continuous Relaxation Evaluation
     if HAS_CMA:
         print("\n[2/3] RUNNING STANDARD CMA-ES CONTINUOUS RELAXATION...")
         t1 = time.time()
         for key, name, fn in BENCHMARKS:
+            if key in cma_traces and not args.force_all:
+                print(f"Skipping {name} ({key}) - already present in precomputed baselines.")
+                continue
             print(f"\n>>> Benchmark: {name} ({key})")
-            worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+            worker_args = [(key, s, max_evals) for s in seeds]
             with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
                 raw_cma = list(executor.map(_worker_cma_seed, worker_args))
             raw_cma.sort(key=lambda item: item[0])
@@ -436,20 +475,23 @@ def main():
             trace_mat = np.array([item[2] for item in raw_cma], dtype=np.float64)
             cma_traces[key] = trace_mat
 
-            values = [res_dict[s] for s in SEEDS]
-            per_seed = {str(s): res_dict[s] for s in SEEDS}
+            values = [res_dict[s] for s in seeds]
+            per_seed = {str(s): res_dict[s] for s in seeds}
             vals_arr = np.array(values, dtype=np.float64)
             cma_results[key] = _calc_stats(vals_arr, per_seed)
             print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
-        print(f"\nCMA-ES Relaxation completed in {time.time() - t1:.2f} seconds.")
+        print(f"\nCMA-ES Relaxation step finished in {time.time() - t1:.2f} seconds.")
 
     # 3. CatCMA with Margin (CatCMAwM, 2025) Evaluation
     if HAS_CATCMAWM:
         print("\n[3/3] RUNNING CATCMA WITH MARGIN (CatCMAwM, 2025)...")
         t2 = time.time()
         for key, name, fn in BENCHMARKS:
+            if key in catcmawm_traces and not args.force_all:
+                print(f"Skipping {name} ({key}) - already present in precomputed baselines.")
+                continue
             print(f"\n>>> Benchmark: {name} ({key})")
-            worker_args = [(key, s, MAX_EVALS) for s in SEEDS]
+            worker_args = [(key, s, max_evals) for s in seeds]
             with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
                 raw_cat = list(executor.map(_worker_catcmawm_seed, worker_args))
             raw_cat.sort(key=lambda item: item[0])
@@ -457,25 +499,21 @@ def main():
             trace_mat = np.array([item[2] for item in raw_cat], dtype=np.float64)
             catcmawm_traces[key] = trace_mat
 
-            values = [res_dict[s] for s in SEEDS]
-            per_seed = {str(s): res_dict[s] for s in SEEDS}
+            values = [res_dict[s] for s in seeds]
+            per_seed = {str(s): res_dict[s] for s in seeds}
             vals_arr = np.array(values, dtype=np.float64)
             catcmawm_results[key] = _calc_stats(vals_arr, per_seed)
             print(f"  -> Min: {np.min(vals_arr):.6f} | Median: {np.median(vals_arr):.6f} | Mean: {np.mean(vals_arr):.6f} | Std: {np.std(vals_arr):.6f}")
-        print(f"\nCatCMAwM completed in {time.time() - t2:.2f} seconds.")
+        print(f"\nCatCMAwM step finished in {time.time() - t2:.2f} seconds.")
 
     # 4. Save to JSON
     combined_results = {
         "random_search": rs_results,
         "cma_es_relaxation": cma_results if HAS_CMA else None,
         "catcmawm": catcmawm_results if HAS_CATCMAWM else None,
-        # Direct aliases for standard access:
-        "sphere": rs_results["sphere"],
-        "coupled": rs_results["coupled"],
-        "rastrigin": rs_results["rastrigin"],
         "metadata": {
-            "max_evals": MAX_EVALS,
-            "seeds": SEEDS,
+            "max_evals": max_evals,
+            "seeds": seeds,
             "config": {
                 "n_real": CONFIG.n_real,
                 "n_count": CONFIG.n_count,
@@ -488,20 +526,24 @@ def main():
             },
         },
     }
+    for key, _, _ in BENCHMARKS:
+        if key in rs_results:
+            combined_results[key] = rs_results[key]
 
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(combined_results, f, indent=2)
 
     # 5. Save full traces to .npz
-    save_dict = {"seeds": np.array(SEEDS, dtype=np.int64)}
+    save_dict = {"seeds": np.array(seeds, dtype=np.int64)}
     for key, _, _ in BENCHMARKS:
-        save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
-        save_dict[f"{key}__rs_traces"] = rs_traces[key]
-        if HAS_CMA:
-            save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
+        if key in rs_results and key in rs_traces:
+            save_dict[f"random_search_{key}"] = np.array([rs_results[key]["per_seed"][str(s)] for s in seeds], dtype=np.float64)
+            save_dict[f"{key}__rs_traces"] = rs_traces[key]
+        if HAS_CMA and key in cma_results and key in cma_traces:
+            save_dict[f"cma_es_relaxation_{key}"] = np.array([cma_results[key]["per_seed"][str(s)] for s in seeds], dtype=np.float64)
             save_dict[f"{key}__cma_traces"] = cma_traces[key]
-        if HAS_CATCMAWM:
-            save_dict[f"catcmawm_{key}"] = np.array([catcmawm_results[key]["per_seed"][str(s)] for s in SEEDS], dtype=np.float64)
+        if HAS_CATCMAWM and key in catcmawm_results and key in catcmawm_traces:
+            save_dict[f"catcmawm_{key}"] = np.array([catcmawm_results[key]["per_seed"][str(s)] for s in seeds], dtype=np.float64)
             save_dict[f"{key}__catcmawm_traces"] = catcmawm_traces[key]
 
     np.savez_compressed(npz_path, **save_dict)

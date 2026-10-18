@@ -52,6 +52,7 @@ def _dynamics_seed_worker(args: Tuple[str, ESConfig, int, int]) -> Tuple[int, Di
         "sigma_fuzzy": [],
         "lambda_circular": [],
         "p_flip_binary": [],
+        "p_mut_categorical": [],
         "cat_confidence": [],
         "cat_entropy_norm": [],
         "cost_real": [],
@@ -74,6 +75,7 @@ def _dynamics_seed_worker(args: Tuple[str, ESConfig, int, int]) -> Tuple[int, Di
         history["p_flip_binary"].append(float(np.mean(p_flips)))
 
         p_mut_cat = 1.0 / (1.0 + np.exp(-np.clip(best_p.logit_cat, -700.0, 700.0)))
+        history["p_mut_categorical"].append(float(np.mean(p_mut_cat)) if len(p_mut_cat) > 0 else 0.0)
         history["cat_confidence"].append(float(np.mean(1.0 - p_mut_cat)) if len(p_mut_cat) > 0 else 0.0)
         if len(p_mut_cat) > 0:
             p_c = np.clip(p_mut_cat, 1e-12, 1.0 - 1e-12)
@@ -100,12 +102,16 @@ def compute_heterogeneous_decomposition(
     """
     t = get_default_targets(cfg)
     u = unpack_genome(ind, cfg)
-    if bench_name == "Generalized_Sphere":
+    if bench_name in ("Generalized_Sphere", "Generalized_Multiplicative"):
         c_real = float(np.sum((u.real - t["real"]) ** 2)) if cfg.n_real > 0 else 0.0
         c_count = float(np.sum((u.count - t["count"]) ** 2)) if cfg.n_count > 0 else 0.0
         c_bin = float(np.sum(u.binary != t["binary"])) if cfg.n_binary > 0 else 0.0
         c_cat = float(np.sum(u.categorical != t["categorical"])) if cfg.n_categorical > 0 else 0.0
-        c_fuzz = float(np.sum((u.fuzzy - t["fuzzy"]) ** 2)) if cfg.n_fuzzy > 0 else 0.0
+        c_fuzz = 0.0
+        if cfg.n_fuzzy > 0:
+            m1, d1 = u.fuzzy[0::2], u.fuzzy[1::2]
+            m2, d2 = t["fuzzy"][0::2], t["fuzzy"][1::2]
+            c_fuzz = float(3.0 * np.sum((m1 - m2) ** 2) + 2.0 * np.sum((d1 - d2) ** 2))
         k = t["circular_k"]
         diff = np.abs(u.circular - t["circular"]) % k
         c_circ = float(np.sum(np.minimum(diff, k - diff) ** 2)) if cfg.n_circular > 0 else 0.0
@@ -202,12 +208,14 @@ def run_heterogeneous_benchmark_suite(
 
     if data_dir is not None:
         os.makedirs(data_dir, exist_ok=True)
-        save_dict = {
-            f"{bench_name}__traces": res["traces"]
-            for bench_name, res in results.items()
-        }
-        save_dict["seeds"] = np.array(seeds, dtype=np.int64)
         traces_path = os.path.join(data_dir, "exp3_traces.npz")
+        save_dict = {}
+        if os.path.exists(traces_path):
+            existing = np.load(traces_path, allow_pickle=True)
+            save_dict = {k: existing[k] for k in existing.files}
+        for bench_name, res in results.items():
+            save_dict[f"{bench_name}__traces"] = res["traces"]
+        save_dict["seeds"] = np.array(seeds, dtype=np.int64)
         np.savez_compressed(traces_path, **save_dict)
         print(f"\nSuccessfully saved experiment 3 traces to: {traces_path}")
 
@@ -265,6 +273,11 @@ def run_heterogeneous_dynamics_tracking(
     if data_dir is not None:
         os.makedirs(data_dir, exist_ok=True)
         dynamics_path = os.path.join(data_dir, "exp3_strategy_dynamics.npz")
+        if os.path.exists(dynamics_path):
+            existing_dyn = np.load(dynamics_path, allow_pickle=True)
+            merged_saved_data = {k: existing_dyn[k] for k in existing_dyn.files}
+            merged_saved_data.update(all_saved_data)
+            all_saved_data = merged_saved_data
         np.savez_compressed(dynamics_path, **all_saved_data)
         print(f"\nSuccessfully saved complete heterogeneous dynamics to: {dynamics_path}")
 

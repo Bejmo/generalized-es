@@ -15,13 +15,15 @@ from src.es_model.config import ESConfig
 
 def _safe_savefig(fig: plt.Figure, path: str, **kwargs) -> None:
     """Save figure with retries to handle transient Windows file locks."""
+    import time
     for attempt in range(5):
         try:
             fig.savefig(path, **kwargs)
             return
-        except OSError:
+        except OSError as e:
             if attempt == 4:
-                raise
+                print(f"Warning: Could not overwrite '{path}' due to Windows file lock ({e}). Figure will still be displayed.")
+                return
             time.sleep(0.3)
 
 
@@ -71,6 +73,8 @@ def plot_heterogeneous_convergence(
         "coupled": "coupled",
         "generalized_rastrigin": "rastrigin",
         "rastrigin": "rastrigin",
+        "generalized_multiplicative": "multiplicative",
+        "multiplicative": "multiplicative",
     }
 
     # 1. Standalone publication-grade figures per benchmark
@@ -90,8 +94,8 @@ def plot_heterogeneous_convergence(
             q25_prop = np.maximum(1e-12, med_prop - res["std"])
             q75_prop = med_prop + res["std"]
 
-        ax.plot(evals, med_prop, color="#1f77b4", lw=2.4, label=f"Generalized ES{cfg_label} (Median)")
-        ax.fill_between(evals, np.maximum(1e-12, q25_prop), q75_prop, color="#1f77b4", alpha=0.22, label="Gen ES IQR [Q1, Q3]")
+        ax.plot(evals, med_prop, color="#1f77b4", lw=2.4, label=f"Generalized ES{cfg_label}")
+        ax.fill_between(evals, np.maximum(1e-12, q25_prop), q75_prop, color="#1f77b4", alpha=0.22)
 
         # B. External baselines from base_data
         if base_data is not None:
@@ -102,8 +106,8 @@ def plot_heterogeneous_convergence(
                 med_cat = np.median(tr_cat, axis=0)
                 q25_cat = np.percentile(tr_cat, 25, axis=0)
                 q75_cat = np.percentile(tr_cat, 75, axis=0)
-                ax.plot(evals, med_cat, color="#2ca02c", lw=2.0, label="CatCMAwM 2025 (Median)")
-                ax.fill_between(evals, np.maximum(1e-12, q25_cat), q75_cat, color="#2ca02c", alpha=0.18, label="CatCMAwM IQR")
+                ax.plot(evals, med_cat, color="#2ca02c", lw=2.0, label="CatCMAwM (2025)")
+                ax.fill_between(evals, np.maximum(1e-12, q25_cat), q75_cat, color="#2ca02c", alpha=0.18)
 
             # 2. CMA-ES Rounding
             cma_key = f"{b_key}__cma_traces"
@@ -112,7 +116,7 @@ def plot_heterogeneous_convergence(
                 med_cma = np.median(tr_cma, axis=0)
                 q25_cma = np.percentile(tr_cma, 25, axis=0)
                 q75_cma = np.percentile(tr_cma, 75, axis=0)
-                ax.plot(evals, med_cma, color="#d62728", lw=1.8, ls="-.", label="CMA-ES Rounding (Median)")
+                ax.plot(evals, med_cma, color="#d62728", lw=1.8, ls="-.", label="CMA-ES Rounding")
                 ax.fill_between(evals, np.maximum(1e-12, q25_cma), q75_cma, color="#d62728", alpha=0.14)
 
             # 3. Random Search
@@ -120,7 +124,7 @@ def plot_heterogeneous_convergence(
             if rs_key in base_data:
                 tr_rs = base_data[rs_key]
                 med_rs = np.median(tr_rs, axis=0)
-                ax.plot(evals, med_rs, color="#7f7f7f", lw=1.5, ls="--", label="Random Search (Median)")
+                ax.plot(evals, med_rs, color="#7f7f7f", lw=1.5, ls="--", label="Random Search")
 
         ax.set_title(f"{bench_name}: Convergence Comparison ({n_seeds} Seeds)", fontsize=12, fontweight="bold")
         ax.set_xlabel("Function Evaluations", fontsize=11)
@@ -140,56 +144,7 @@ def plot_heterogeneous_convergence(
         else:
             plt.close(fig)
 
-    # 2. Interactive comparative overview
-    if not show:
-        return
-    n_b = len(bench_names)
-    fig, axes = plt.subplots(1, n_b, figsize=(6.2 * n_b, 5), sharey=False)
-    if not isinstance(axes, (list, np.ndarray)):
-        axes = [axes]
-    for i, bench_name in enumerate(bench_names):
-        ax = axes[i]
-        b_key = bench_key_map.get(bench_name.lower(), bench_name.lower().replace("generalized_", ""))
-
-        res = results[bench_name]
-        tr_prop = res.get("traces")
-        if tr_prop is not None:
-            med_prop = np.median(tr_prop, axis=0)
-            q25_prop = np.percentile(tr_prop, 25, axis=0)
-            q75_prop = np.percentile(tr_prop, 75, axis=0)
-        else:
-            med_prop = res["mean"]
-            q25_prop = np.maximum(1e-12, med_prop - res["std"])
-            q75_prop = med_prop + res["std"]
-
-        ax.plot(evals, med_prop, color="#1f77b4", lw=2.2, label=f"Generalized ES{cfg_label}")
-        ax.fill_between(evals, np.maximum(1e-12, q25_prop), q75_prop, color="#1f77b4", alpha=0.22)
-
-        if base_data is not None:
-            cat_key = f"{b_key}__catcmawm_traces"
-            if cat_key in base_data:
-                med_cat = np.median(base_data[cat_key], axis=0)
-                ax.plot(evals, med_cat, color="#2ca02c", lw=1.8, label="CatCMAwM")
-
-            cma_key = f"{b_key}__cma_traces"
-            if cma_key in base_data:
-                med_cma = np.median(base_data[cma_key], axis=0)
-                ax.plot(evals, med_cma, color="#d62728", lw=1.6, ls="-.", label="CMA-ES Rounding")
-
-            rs_key = f"{b_key}__rs_traces"
-            if rs_key in base_data:
-                med_rs = np.median(base_data[rs_key], axis=0)
-                ax.plot(evals, med_rs, color="#7f7f7f", lw=1.4, ls="--", label="Random Search")
-
-        ax.set_title(f"{bench_name}\n({n_seeds} Seeds)", fontsize=12, fontweight="bold")
-        ax.set_xlabel("Function Evaluations", fontsize=11)
-        ax.set_ylabel("Best Fitness (Log Scale)", fontsize=11)
-        ax.set_yscale("log")
-        ax.grid(True, which="both", ls="--", alpha=0.5)
-        ax.legend(loc="upper right", frameon=True, fontsize=8)
-
-    plt.tight_layout()
-    plt.show()
+    return
 
 
 def plot_heterogeneous_dynamics(
@@ -211,7 +166,7 @@ def plot_heterogeneous_dynamics(
         first_arr = next(iter(bench_agg.values()))
         n_generations = len(first_arr)
     if n_seeds is None:
-        n_seeds = 10
+        n_seeds = 40
 
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
     gens = np.arange(n_generations)
@@ -224,10 +179,13 @@ def plot_heterogeneous_dynamics(
     ]
 
     m_keys_2 = [
-        ("cat_confidence", r"Cat. Confidence $\max(p)$", "#2ca02c", "-", 2.2),
-        ("cat_entropy_norm", r"Cat. Shannon Entropy $H/\ln(K)$", "#9467bd", "--", 1.8),
         ("p_flip_binary", r"Binary Flip Prob. $p_{flip}$", "#d62728", "-", 2.0),
     ]
+    if "p_mut_categorical_mean" in bench_agg:
+        m_keys_2.append(("p_mut_categorical", r"Cat. Mutation Prob. $p_{mut}$", "#2ca02c", "-", 2.0))
+    elif "cat_confidence_mean" in bench_agg:
+        m_keys_2.append(("cat_confidence", r"Cat. Confidence $\max(p)$", "#2ca02c", "-", 2.2))
+        m_keys_2.append(("cat_entropy_norm", r"Cat. Shannon Entropy $H/\ln(K)$", "#9467bd", "--", 1.8))
 
     m_keys_3 = [
         ("cost_real", "Real Cost", "#1f77b4"),
@@ -309,40 +267,4 @@ def plot_heterogeneous_dynamics(
     else:
         plt.close(fig_c)
 
-    # 4. Interactive 3-Panel Diagnostics Overview in notebook
-    if not show:
-        return
-    fig, axes = plt.subplots(1, 3, figsize=(19, 5.2))
-    for key, lbl, col, ls in m_keys_1:
-        axes[0].plot(gens, bench_agg[f"{key}_mean"], label=lbl, color=col, ls=ls, lw=2.0)
-        axes[0].fill_between(gens, np.maximum(bench_agg[f"{key}_mean"] - bench_agg[f"{key}_std"], 1e-7), bench_agg[f"{key}_mean"] + bench_agg[f"{key}_std"], color=col, alpha=0.15)
-    axes[0].set_title("A) Mutation Intensities & Step Sizes", fontsize=12, fontweight="bold")
-    axes[0].set_xlabel("Generation", fontsize=11)
-    axes[0].set_ylabel("Parameter Value (Log Scale)", fontsize=11)
-    axes[0].set_yscale("log")
-    axes[0].grid(True, which="both", ls="--", alpha=0.5)
-    axes[0].legend(loc="upper right", frameon=True, fontsize=10)
-
-    for key, lbl, col, ls, lw in m_keys_2:
-        axes[1].plot(gens, bench_agg[f"{key}_mean"], label=lbl, color=col, ls=ls, lw=lw)
-        axes[1].fill_between(gens, np.clip(bench_agg[f"{key}_mean"] - bench_agg[f"{key}_std"], 0.0, 1.0), np.clip(bench_agg[f"{key}_mean"] + bench_agg[f"{key}_std"], 0.0, 1.0), color=col, alpha=0.15)
-    axes[1].set_title("B) Probabilities & Information Certainty", fontsize=12, fontweight="bold")
-    axes[1].set_xlabel("Generation", fontsize=11)
-    axes[1].set_ylabel("Probability / Normalized Metric [0, 1]", fontsize=11)
-    axes[1].set_ylim(-0.02, 1.05)
-    axes[1].grid(True, which="both", ls="--", alpha=0.5)
-    axes[1].legend(loc="center right", frameon=True, fontsize=10)
-
-    for key, lbl, col in m_keys_3:
-        axes[2].plot(gens, np.maximum(bench_agg[f"{key}_mean"], 1e-12), label=lbl, color=col, lw=1.8)
-    axes[2].set_title("C) Fitness Error Decomposition", fontsize=12, fontweight="bold")
-    axes[2].set_xlabel("Generation", fontsize=11)
-    axes[2].set_ylabel("Partial Fitness Contribution (Log Scale)", fontsize=11)
-    axes[2].set_yscale("log")
-    axes[2].set_ylim(bottom=1e-8)
-    axes[2].grid(True, which="both", ls="--", alpha=0.5)
-    axes[2].legend(loc="upper right", frameon=True, fontsize=9.5)
-
-    fig.suptitle(f"Heterogeneous Variable & Strategy Dynamics: {bench_name} (Mean $\\pm 1$ Std, {n_seeds} Seeds)", fontsize=14, fontweight="bold", y=0.99)
-    plt.tight_layout()
-    plt.show()
+    return

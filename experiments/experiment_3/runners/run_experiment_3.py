@@ -59,12 +59,12 @@ def compute_wilcoxon_table_exp3(
     baseline_json_path: str,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Computes Wilcoxon signed-rank tests for Experiment 3 (Table 5.3).
+    Computes Wilcoxon signed-rank tests for Experiment 3.
     Generalized ES vs [Uniform Random Search, Continuous CMA-ES Rounding, CatCMAwM (2025)]
-    across 3 heterogeneous benchmarks: Sphere, Coupled, Rastrigin.
+    across 4 heterogeneous benchmarks: Sphere, Coupled, Rastrigin, Multiplicative.
 
     Enforces strict seed-to-result dictionary matching and global Holm-Bonferroni
-    family-wise correction over all m=9 comparisons.
+    family-wise correction over all m=12 comparisons.
     """
     data3 = np.load(exp3_traces_path, allow_pickle=True)
     with open(baseline_json_path, "r", encoding="utf-8") as f:
@@ -74,6 +74,7 @@ def compute_wilcoxon_table_exp3(
         ("Generalized_Sphere", "sphere", "Heterogeneous Sphere"),
         ("Generalized_Coupled", "coupled", "Heterogeneous Coupled"),
         ("Generalized_Rastrigin", "rastrigin", "Heterogeneous Rastrigin"),
+        ("Generalized_Multiplicative", "multiplicative", "Heterogeneous Multiplicative"),
     ]
 
     if "seeds" in data3:
@@ -84,6 +85,8 @@ def compute_wilcoxon_table_exp3(
     all_comparison_records: List[Dict[str, Any]] = []
 
     for bench_key, json_key, bench_name in benchmarks:
+        if f"{bench_key}__traces" not in data3:
+            continue
         prop_traces = data3[f"{bench_key}__traces"]
         prop_final = prop_traces[:, -1]
         prop_dict = {int(s): float(prop_final[i]) for i, s in enumerate(seeds)}
@@ -159,7 +162,7 @@ def compute_wilcoxon_table_exp3(
         rec["adj_p"] = float(adj_p_list[i])
         rec["significant"] = bool(sig_list[i])
         if sig_list[i]:
-            rec["decision"] = "Generalized ES Wins" if rec["wins"] > rec["losses"] else "Baseline Wins"
+            rec["decision"] = "Generalized ES Wins" if rec["r_biserial"] > 0 else "Baseline Wins"
         else:
             rec["decision"] = "Statistical Tie"
 
@@ -177,6 +180,7 @@ def main():
     parser.add_argument("--n-seeds", type=int, default=40)
     parser.add_argument("--max-workers", type=int, default=8)
     parser.add_argument("--output-dir", type=str, default="experiments/experiment_3")
+    parser.add_argument("--force-all", action="store_true", help="Force recomputation of all benchmarks even if present in cache.")
     parser.add_argument("--load-precomputed", action="store_true", help="Load precomputed traces and dynamics from data/ instead of re-running simulations.")
     args = parser.parse_args()
 
@@ -200,32 +204,61 @@ def main():
         seed=42,
     )
 
+    traces_file = os.path.join(data_dir, "exp3_traces.npz")
+    dynamics_file = os.path.join(data_dir, "exp3_strategy_dynamics.npz")
+
     if args.load_precomputed:
         print(f"Loading precomputed benchmark suite and dynamics from {data_dir}...")
         results = load_heterogeneous_benchmark_suite(data_dir, GENERALIZED_BENCHMARKS)
         if results is None:
-            raise FileNotFoundError(f"Missing traces at {data_dir}/exp3_traces.npz")
+            raise FileNotFoundError(f"Missing traces at {traces_file}")
         all_saved_data, bench_dynamics = load_heterogeneous_dynamics_tracking(data_dir, GENERALIZED_BENCHMARKS)
     else:
-        print(f"Running heterogeneous benchmark suite ({args.n_seeds} seeds, max_evals={args.max_evals})...")
-        results = run_heterogeneous_benchmark_suite(
-            benchmarks=GENERALIZED_BENCHMARKS,
-            config=config,
-            max_evals=args.max_evals,
-            seeds=seeds,
-            data_dir=data_dir,
-            max_workers=args.max_workers,
-        )
+        # Determine which benchmarks to run
+        benchmarks_to_run_traces = dict(GENERALIZED_BENCHMARKS)
+        benchmarks_to_run_dynamics = dict(GENERALIZED_BENCHMARKS)
 
-        print(f"\nRunning heterogeneous strategy dynamics tracking ({args.n_seeds} seeds)...")
-        all_saved_data, bench_dynamics = run_heterogeneous_dynamics_tracking(
-            benchmarks=GENERALIZED_BENCHMARKS,
-            config=config,
-            seeds=seeds,
-            max_evals=args.max_evals,
-            data_dir=data_dir,
-            max_workers=args.max_workers,
-        )
+        if not args.force_all and os.path.exists(traces_file):
+            existing_traces = np.load(traces_file, allow_pickle=True)
+            for b_name in list(benchmarks_to_run_traces.keys()):
+                key = f"{b_name}__traces"
+                if key in existing_traces and existing_traces[key].shape[0] >= args.n_seeds:
+                    print(f"Skipping {b_name} traces - already present in {traces_file}.")
+                    del benchmarks_to_run_traces[b_name]
+
+        if not args.force_all and os.path.exists(dynamics_file):
+            existing_dyn = np.load(dynamics_file, allow_pickle=True)
+            for b_name in list(benchmarks_to_run_dynamics.keys()):
+                key = f"{b_name}__cost_real_mean"
+                if key in existing_dyn:
+                    print(f"Skipping {b_name} dynamics - already present in {dynamics_file}.")
+                    del benchmarks_to_run_dynamics[b_name]
+
+        if benchmarks_to_run_traces:
+            print(f"Running heterogeneous benchmark suite for {list(benchmarks_to_run_traces.keys())} ({args.n_seeds} seeds, max_evals={args.max_evals})...")
+            run_heterogeneous_benchmark_suite(
+                benchmarks=benchmarks_to_run_traces,
+                config=config,
+                max_evals=args.max_evals,
+                seeds=seeds,
+                data_dir=data_dir,
+                max_workers=args.max_workers,
+            )
+
+        if benchmarks_to_run_dynamics:
+            print(f"\nRunning heterogeneous strategy dynamics tracking for {list(benchmarks_to_run_dynamics.keys())} ({args.n_seeds} seeds)...")
+            run_heterogeneous_dynamics_tracking(
+                benchmarks=benchmarks_to_run_dynamics,
+                config=config,
+                seeds=seeds,
+                max_evals=args.max_evals,
+                data_dir=data_dir,
+                max_workers=args.max_workers,
+            )
+
+        # Load complete benchmark suite and dynamics for all benchmarks to plot
+        results = load_heterogeneous_benchmark_suite(data_dir, GENERALIZED_BENCHMARKS)
+        all_saved_data, bench_dynamics = load_heterogeneous_dynamics_tracking(data_dir, GENERALIZED_BENCHMARKS)
 
     # Plot convergence curves comparing all 4 methods
     baselines_npz_path = os.path.join(data_dir, "random_search_baselines.npz")
@@ -255,12 +288,13 @@ def main():
     baseline_file = os.path.join(data_dir, "random_search_results.json")
     traces_file = os.path.join(data_dir, "exp3_traces.npz")
     if os.path.exists(baseline_file) and os.path.exists(traces_file):
+        tests_exp3 = compute_wilcoxon_table_exp3(traces_file, baseline_file)
+        m_tests = sum(len(records) for records in tests_exp3.values())
         print(f"\n" + "=" * 115)
-        print(f" TABLE 5.3: STATISTICAL HYPOTHESIS TESTING VS. EXTERNAL BASELINES ({args.n_seeds} SEEDS, GLOBAL HOLM m=9)")
+        print(f" STATISTICAL HYPOTHESIS TESTING VS. EXTERNAL BASELINES ({args.n_seeds} SEEDS, GLOBAL HOLM m={m_tests})")
         print("=" * 115)
         print(f"{'Benchmark':<24} | {'Opponent':<18} | {'W/T/L':<8} | {'W-stat':<8} | {'r_rb':<7} | {'p_raw':<10} | {'p_adj':<10} | {'Decision'}")
         print("-" * 115)
-        tests_exp3 = compute_wilcoxon_table_exp3(traces_file, baseline_file)
         for bench_name, records in tests_exp3.items():
             for r in records:
                 wtl = f"{r['wins']}/{r['ties']}/{r['losses']}"
