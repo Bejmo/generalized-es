@@ -1,6 +1,6 @@
 """
-run_experiment_2.py: CLI runner for Experiment 2 (Dynamic Target Shift - DTS).
-Executes DTS tracking protocol across all 6 heterogeneous variable types.
+run_experiment_2.py: CLI runner for Experiment 2 (Target Shift - TS).
+Executes TS tracking protocol across all 6 heterogeneous variable types.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from experiments.experiment_2.runners.plotting import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run Experiment 2: Dynamic Target Shift Protocol")
+    parser = argparse.ArgumentParser(description="Run Experiment 2: Target Shift Experiment")
     parser.add_argument("--n-seeds", type=int, default=10, help="Number of random seeds")
     parser.add_argument("--n-gens", type=int, default=1000, help="Number of generations")
     parser.add_argument("--g-shift", type=int, default=500, help="Generation of target shock")

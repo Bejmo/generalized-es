@@ -2,7 +2,7 @@
 isolation_landscapes.py: Fitness landscapes for Experiment 3 (Variable Isolation and Operator Validation).
 
 Provides purpose-built landscapes for testing each of the 6 variable types in isolation:
-1. DTSLandscape: Dynamic Target Shift wrapper (Arnold & Beyer, 2006).
+1. DTSLandscape: Target Shift wrapper (Arnold & Beyer, 2006).
 2. integer_staircase: Multi-scale staircase with varying step sizes.
 3. binary_hamming: Hamming distance on binary bitstrings.
 4. categorical_deceptive: Deceptive landscape with local suboptimum.
@@ -25,7 +25,7 @@ from src.es_model.individual import Individual, unpack_genome
 
 class DTSLandscape:
     """
-    Dynamic Target Shift (DTS) landscape wrapper (Arnold & Beyer, 2006).
+    Target Shift (TS) landscape wrapper (Arnold & Beyer, 2006).
 
     Optimizes toward target t1 for generations g < g_shift, then instantaneously
     shifts the target to t2 for generations g >= g_shift.

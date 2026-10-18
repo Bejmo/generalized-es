@@ -17,6 +17,21 @@ import matplotlib.pyplot as plt
 from src.es_model.config import ESConfig
 
 
+def _safe_savefig(fig: plt.Figure, path: str, **kwargs) -> None:
+    """Save figure with retries and graceful fallback to handle Windows file locks."""
+    import time
+    for attempt in range(5):
+        try:
+            fig.savefig(path, **kwargs)
+            print(f"Saved figure: {path}")
+            return
+        except OSError as e:
+            if attempt == 4:
+                print(f"Warning: Could not overwrite '{path}' due to Windows file lock ({e}). Figure is displayed in notebook.")
+                return
+            time.sleep(0.3)
+
+
 def plot_dts_fitness(
     results: Dict[str, Any],
     title: str,
@@ -59,8 +74,7 @@ def plot_dts_fitness(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=200, bbox_inches="tight")
-        print(f"Saved figure: {save_path}")
+        _safe_savefig(fig, save_path, dpi=200, bbox_inches="tight")
     if show:
         plt.show()
     else:
@@ -95,21 +109,17 @@ def plot_dts_strategy(
 
     ax_twin = None
     if var_type in ("binary", "categorical"):
-        color = "#9467bd" if var_type == "binary" else "#e377c2"
-        ax.plot(gens, med_s, color=color, lw=2.2, label=r"Median Logit $z$ (Left Axis)")
-        ax.set_ylabel(r"Logit Value $z$ (Log-odds scale)", color=color, fontweight="bold", fontsize=11)
-        ax.tick_params(axis="y", labelcolor=color, labelsize=10)
-        ax.spines["left"].set_color(color)
-        ax.spines["left"].set_linewidth(1.8)
+        p_arr = 1.0 / (1.0 + np.exp(-strat_arr))
+        med_p = np.median(p_arr, axis=0)
+        q25_p = np.percentile(p_arr, 25, axis=0)
+        q75_p = np.percentile(p_arr, 75, axis=0)
 
-        p_mut = 1.0 / (1.0 + np.exp(-med_s))
-        ax_twin = ax.twinx()
-        ax_twin.plot(gens, p_mut, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{mut}} = \sigma(z)$ (Right Axis)")
-        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{mut}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
-        ax_twin.tick_params(axis="y", labelcolor="#8c564b", labelsize=10)
-        ax_twin.spines["right"].set_color("#8c564b")
-        ax_twin.spines["right"].set_linewidth(1.8)
-        ax_twin.grid(False)
+        color = "#9467bd" if var_type == "binary" else "#e377c2"
+        ax.plot(gens, med_p, color=color, lw=2.2, label=r"Median Mutation Rate $p$")
+        ax.fill_between(gens, q25_p, q75_p, color=color, alpha=0.25, label="IQR (25-75%)")
+        ax.set_ylabel(r"Mutation Rate $p = \sigma(z)$", color=color, fontweight="bold", fontsize=11)
+        ax.tick_params(axis="y", labelcolor=color, labelsize=10)
+        ax.set_ylim(0.0, max(0.15, float(np.max(q75_p)) * 1.15))
     else:
         q25_s = np.percentile(strat_arr, 25, axis=0)
         ax.plot(gens, med_s, color="#2ca02c", lw=2.0, label=f"Median {param_name}")
@@ -120,20 +130,13 @@ def plot_dts_strategy(
     ax.axvline(g_shift, color="red", ls="--", lw=1.5, label=f"Shift (g={g_shift})")
     ax.set_title(f"{title}: Self-Adaptation ({param_name})", fontsize=12, fontweight="bold")
     ax.set_xlabel("Generation")
-
-    if ax_twin is not None:
-        lines_1, labels_1 = ax.get_legend_handles_labels()
-        lines_2, labels_2 = ax_twin.get_legend_handles_labels()
-        ax.legend(lines_1 + lines_2, labels_1 + labels_2, loc="lower left", framealpha=0.9)
-    else:
-        ax.legend(loc="upper right" if var_type != "binary" else "lower left")
+    ax.legend(loc="upper right" if var_type != "binary" else "lower left")
     ax.grid(True, which="both", ls="--", alpha=0.5)
 
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=200, bbox_inches="tight")
-        print(f"Saved figure: {save_path}")
+        _safe_savefig(fig, save_path, dpi=200, bbox_inches="tight")
     if show:
         plt.show()
     else:
@@ -189,23 +192,18 @@ def plot_dts_3panel(
     q25_s = np.percentile(strat_arr, 25, axis=0)
     q75_s = np.percentile(strat_arr, 75, axis=0)
 
-    ax_twin = None
     if var_type in ("binary", "categorical"):
-        color = "#9467bd" if var_type == "binary" else "#e377c2"
-        axes[1].plot(gens, med_s, color=color, lw=2.2, label=r"Median Logit $z$ (Left Axis)")
-        axes[1].set_ylabel(r"Logit Value $z$ (Log-odds scale)", color=color, fontweight="bold", fontsize=11)
-        axes[1].tick_params(axis="y", labelcolor=color, labelsize=10)
-        axes[1].spines["left"].set_color(color)
-        axes[1].spines["left"].set_linewidth(1.8)
+        p_arr = 1.0 / (1.0 + np.exp(-strat_arr))
+        med_p = np.median(p_arr, axis=0)
+        q25_p = np.percentile(p_arr, 25, axis=0)
+        q75_p = np.percentile(p_arr, 75, axis=0)
 
-        p_mut = 1.0 / (1.0 + np.exp(-med_s))
-        ax_twin = axes[1].twinx()
-        ax_twin.plot(gens, p_mut, color="#8c564b", ls="--", lw=2.0, label=r"Mutation Prob. $p_{\mathrm{mut}} = \sigma(z)$ (Right Axis)")
-        ax_twin.set_ylabel(r"Mutation Probability $p_{\mathrm{mut}}$ (Probability scale)", color="#8c564b", fontweight="bold", fontsize=11)
-        ax_twin.tick_params(axis="y", labelcolor="#8c564b", labelsize=10)
-        ax_twin.spines["right"].set_color("#8c564b")
-        ax_twin.spines["right"].set_linewidth(1.8)
-        ax_twin.grid(False)
+        color = "#9467bd" if var_type == "binary" else "#e377c2"
+        axes[1].plot(gens, med_p, color=color, lw=2.2, label=r"Median Mutation Rate $p$")
+        axes[1].fill_between(gens, q25_p, q75_p, color=color, alpha=0.25, label="IQR (25-75%)")
+        axes[1].set_ylabel(r"Mutation Rate $p = \sigma(z)$", color=color, fontweight="bold", fontsize=11)
+        axes[1].tick_params(axis="y", labelcolor=color, labelsize=10)
+        axes[1].set_ylim(0.0, max(0.15, float(np.max(q75_p)) * 1.15))
     else:
         axes[1].plot(gens, med_s, color="#2ca02c", lw=2.0, label=f"Median {param_name}")
         axes[1].fill_between(gens, np.maximum(1e-10, q25_s), q75_s, color="#2ca02c", alpha=0.25, label="IQR (25-75%)")
@@ -215,13 +213,7 @@ def plot_dts_3panel(
     axes[1].axvline(g_shift, color="red", ls="--", lw=1.5, label=f"Shift (g={g_shift})")
     axes[1].set_title(f"{title}: Self-Adaptation ({param_name})", fontsize=12, fontweight="bold")
     axes[1].set_xlabel("Generation")
-
-    if ax_twin is not None:
-        lines_1, labels_1 = axes[1].get_legend_handles_labels()
-        lines_2, labels_2 = ax_twin.get_legend_handles_labels()
-        axes[1].legend(lines_1 + lines_2, labels_1 + labels_2, loc="lower left", framealpha=0.9)
-    else:
-        axes[1].legend(loc="upper right" if var_type not in ("binary", "categorical") else "lower left")
+    axes[1].legend(loc="upper right" if var_type not in ("binary", "categorical") else "lower left")
     axes[1].grid(True, which="both", ls="--", alpha=0.5)
 
     # --- PANEL 3: Invariant Violations ---
@@ -238,8 +230,7 @@ def plot_dts_3panel(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=200, bbox_inches="tight")
-        print(f"Saved figure: {save_path}")
+        _safe_savefig(fig, save_path, dpi=200, bbox_inches="tight")
     if show:
         plt.show()
     else:
@@ -261,8 +252,8 @@ def plot_dts_unified_grid(
     configs = [
         (0, 0, "real", "#2ca02c", r"Real: $\sigma_{\mathrm{real}}$ (Log-normal)", r"Step Size $\sigma$", True),
         (0, 1, "count", "#ff7f0e", r"Count: $\lambda_{\mathrm{count}}$ (Skellam)", r"Rate Parameter $\lambda$", True),
-        (0, 2, "binary", "#9467bd", r"Binary: Logit $z$ (Logit-normal)", "Logit $z$", False),
-        (1, 0, "categorical", "#e377c2", r"Categorical: Logit $z$ (Logit-normal)", "Logit $z$", False),
+        (0, 2, "binary", "#9467bd", r"Binary: Mutation Rate $p$", r"Mutation Rate $p$", False),
+        (1, 0, "categorical", "#e377c2", r"Categorical: Mutation Rate $p$", r"Mutation Rate $p$", False),
         (1, 1, "fuzzy", "#17becf", r"Fuzzy: $\sigma_{\mathrm{fuzzy}}$ (Center/Disp)", r"Step Size $\sigma$", True),
         (1, 2, "circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular)", r"Rate Parameter $\lambda$", True),
     ]
@@ -276,7 +267,12 @@ def plot_dts_unified_grid(
         ax = axes[row, col]
         res = res_by_type[vtype]
         gens = np.arange(res["n_gens"])
-        med_strat = np.median(res["strategy"], axis=0)
+        if vtype in ("binary", "categorical"):
+            p_arr = 1.0 / (1.0 + np.exp(-res["strategy"]))
+            med_strat = np.median(p_arr, axis=0)
+            ax.set_ylim(0.0, max(0.15, float(np.max(med_strat)) * 1.15))
+        else:
+            med_strat = np.median(res["strategy"], axis=0)
 
         ax.plot(gens, med_strat, color=color, lw=2.0)
         ax.axvline(g_shift, color="red", ls="--", lw=1.2)
@@ -292,8 +288,7 @@ def plot_dts_unified_grid(
     plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=200, bbox_inches="tight")
-        print(f"Saved figure: {save_path}")
+        _safe_savefig(fig, save_path, dpi=200, bbox_inches="tight")
     if show:
         plt.show()
     else:
@@ -308,13 +303,13 @@ def plot_dts_individual_summaries(
 ) -> None:
     """
     Generate and save separate standalone figures for each of the 6 variable representations
-    under the Dynamic Target Shift (DTS) protocol.
+    under the Target Shift (TS) protocol.
     """
     configs = [
         ("real", "#2ca02c", r"Real ($\mathbb{R}$): $\sigma_{\mathrm{real}}$ (Log-normal)", r"Step Size $\sigma$", True),
         ("count", "#ff7f0e", r"Count ($\mathbb{N}_0$): $\lambda_{\mathrm{count}}$ (Skellam)", r"Rate Parameter $\lambda$", True),
-        ("binary", "#9467bd", r"Binary ({0, 1}): Logit $z$ (Logit-normal)", "Logit $z$", False),
-        ("categorical", "#e377c2", r"Categorical: Logit $z$ (Logit-normal)", "Logit $z$", False),
+        ("binary", "#9467bd", r"Binary ({0, 1}): Mutation Rate $p$", r"Mutation Rate $p$", False),
+        ("categorical", "#e377c2", r"Categorical: Mutation Rate $p$", r"Mutation Rate $p$", False),
         ("fuzzy", "#17becf", r"Fuzzy: $\sigma_{\mathrm{fuzzy}}$ (Center/Dispersion)", r"Step Size $\sigma$", True),
         ("circular", "#bcbd22", r"Circular: $\lambda_{\mathrm{circular}}$ (Modular Step)", r"Rate Parameter $\lambda$", True),
     ]
@@ -330,9 +325,15 @@ def plot_dts_individual_summaries(
     for vtype, color, title, ylabel, is_log in configs:
         res = res_by_type[vtype]
         gens = np.arange(res["n_gens"])
-        med_strat = np.median(res["strategy"], axis=0)
-        q25_strat = np.percentile(res["strategy"], 25, axis=0)
-        q75_strat = np.percentile(res["strategy"], 75, axis=0)
+        if vtype in ("binary", "categorical"):
+            p_arr = 1.0 / (1.0 + np.exp(-res["strategy"]))
+            med_strat = np.median(p_arr, axis=0)
+            q25_strat = np.percentile(p_arr, 25, axis=0)
+            q75_strat = np.percentile(p_arr, 75, axis=0)
+        else:
+            med_strat = np.median(res["strategy"], axis=0)
+            q25_strat = np.percentile(res["strategy"], 25, axis=0)
+            q75_strat = np.percentile(res["strategy"], 75, axis=0)
 
         fig, ax = plt.subplots(figsize=(7.5, 4.6))
         ax.plot(gens, med_strat, color=color, lw=2.2, label=f"Median Strategy ({vtype.capitalize()})")
@@ -341,6 +342,8 @@ def plot_dts_individual_summaries(
             ax.set_yscale("log")
         else:
             ax.fill_between(gens, q25_strat, q75_strat, color=color, alpha=0.25, label="IQR (25-75%)")
+            if vtype in ("binary", "categorical"):
+                ax.set_ylim(0.0, max(0.15, float(np.max(q75_strat)) * 1.15))
 
         ax.axvline(g_shift, color="red", ls="--", lw=1.5, label=f"Target Shift (g={g_shift})")
         ax.set_title(title, fontweight="bold", fontsize=12)
@@ -352,8 +355,7 @@ def plot_dts_individual_summaries(
         plt.tight_layout()
         if save_dir:
             fig_path = os.path.join(save_dir, f"dts_{vtype}_summary.png")
-            fig.savefig(fig_path, dpi=200, bbox_inches="tight")
-            print(f"Saved separate figure: {fig_path}")
+            _safe_savefig(fig, fig_path, dpi=200, bbox_inches="tight")
         if show:
             plt.show()
         else:

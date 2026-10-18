@@ -2,7 +2,7 @@
 runners.py: Execution and orchestration routines for Experiments 2 and 3.
 
 Centralizes simulation loops, hyperparameter configuration, and trace collection for:
-1. Dynamic Target Shift (DTS) across the 6 variable types (Real, Count, Binary, Categorical, Fuzzy, Circular).
+1. Target Shift (TS) across the 6 variable types (Real, Count, Binary, Categorical, Fuzzy, Circular).
 2. Domain invariant and singularity stress tests (INV-R to INV-S).
 3. Architectural ablation studies (Binary Ceiling and Categorical Gauge Drift).
 4. Experiment 3 synthetic mixed-variable benchmark suites and heterogeneous dynamics tracking.
@@ -73,7 +73,7 @@ def run_dts_experiment(
     lam: int = 100,
 ) -> Dict[str, Any]:
     """
-    Execute the Dynamic Target Shift (DTS) protocol on a specific variable type in isolation.
+    Execute the Target Shift (TS) protocol on a specific variable type in isolation.
 
     Parameters
     ----------
@@ -200,14 +200,15 @@ def run_dts_experiment(
 
 def compute_dts_summary_metrics(results_list: List[Dict[str, Any]], g_shift: int, n_gens: int) -> pd.DataFrame:
     """
-    Compute consolidated quantitative metrics for the DTS protocol:
-    - Cooling Ratio (Phase A)
-    - Re-inflation Lag (generations to peak parameter following target shift)
-    - Phase C / Phase A convergence speed ratio
-    - Invariant violations count
+    Compute standard dynamic benchmark metrics for the Target Shift (TS) protocol:
+    - Shock Severity (Delta f): Median fitness immediately after the target displacement.
+    - Recovery Time (G_rec): Median generations post-shift to attain resolution threshold
+      (0.0 for discrete/combinatorial domains, 1e-4 for continuous/fuzzy spaces).
+    - Final Fitness: Median best residual fitness at the final generation (G=n_gens-1).
+    - Speed Ratio (SR_C/A): Ratio of convergence velocity post-shock vs cold start.
     """
     label_map = {
-        "real": "Real (R)",
+        "real": "Continuous (R)",
         "count": "Count (Z)",
         "binary": "Binary (B)",
         "categorical": "Categorical (C)",
@@ -218,21 +219,28 @@ def compute_dts_summary_metrics(results_list: List[Dict[str, Any]], g_shift: int
     metrics: List[Dict[str, Any]] = []
     for res in results_list:
         vtype = res["var_type"]
-        fit_arr = res["fitness"]
-        strat_arr = res["strategy"]
-        inv_arr = res["invariants"]
+        fit_arr = res["fitness"]  # shape: (n_seeds, n_gens)
 
-        # 1. Phase A cooling ratio
-        init_strat = np.median(strat_arr[:, 0])
-        min_strat_a = np.median(strat_arr[:, g_shift - 1])
-        cooling_ratio = init_strat / max(1e-12, min_strat_a)
+        # 1. Shock Severity (Delta f): median fitness immediately following the shock at g_shift
+        post_shift_init = fit_arr[:, g_shift]
+        shock_severity = float(np.median(post_shift_init))
 
-        # 2. Re-inflation lag (generations to strategy peak post-shift)
-        post_shift_strat = strat_arr[:, g_shift:]
-        peak_gens = [np.argmax(post_shift_strat[i]) for i in range(len(post_shift_strat))]
-        re_inflation_lag = int(np.median(peak_gens))
+        # 2. Recovery Time (G_rec): median generations post-shock to reach resolution threshold
+        threshold = 1e-4 if vtype in ("real", "fuzzy") else 0.0
+        rec_gens_list: List[int] = []
+        for s in range(fit_arr.shape[0]):
+            post_trace = fit_arr[s, g_shift:]
+            rec_idx = np.where(post_trace <= threshold)[0]
+            if len(rec_idx) > 0:
+                rec_gens_list.append(int(rec_idx[0]))
+            else:
+                rec_gens_list.append(int(len(post_trace)))
+        recovery_time = int(np.median(rec_gens_list))
 
-        # 3. Relative convergence speed ratio (Phase C slope vs Phase A slope)
+        # 3. Final Fitness at the last generation
+        final_fit = float(np.median(fit_arr[:, -1]))
+
+        # 4. Relative convergence speed ratio (Phase C slope vs Phase A slope)
         fit_a_start = np.median(fit_arr[:, 0])
         fit_a_end = np.median(fit_arr[:, g_shift - 1])
         slope_a = (np.log10(max(1e-12, fit_a_start)) - np.log10(max(1e-12, fit_a_end))) / g_shift
@@ -240,17 +248,14 @@ def compute_dts_summary_metrics(results_list: List[Dict[str, Any]], g_shift: int
         fit_c_start = np.median(fit_arr[:, g_shift])
         fit_c_end = np.median(fit_arr[:, -1])
         slope_c = (np.log10(max(1e-12, fit_c_start)) - np.log10(max(1e-12, fit_c_end))) / (n_gens - g_shift)
-        speed_ratio = slope_c / max(1e-6, slope_a)
-
-        # 4. Invariant violations count (all monitors record discrete violation counts >= 0)
-        tot_violations = int(np.sum(inv_arr > 0))
+        speed_ratio = float(slope_c / max(1e-6, slope_a))
 
         metrics.append({
-            "Variable Type": label_map.get(vtype, vtype),
-            "Cooling Ratio (Phase A)": f"{cooling_ratio:.2e}",
-            "Re-inflation Lag (gens)": f"{re_inflation_lag:d}",
-            "Phase C/A Speed Ratio": f"{speed_ratio:.2f}",
-            "Invariant Violations": tot_violations,
+            "Variable Domain": label_map.get(vtype, vtype),
+            "Shock Severity (Delta f)": f"{shock_severity:.2f}" if shock_severity >= 1.0 else f"{shock_severity:.2e}",
+            "Recovery Time (G_rec)": f"{recovery_time:d}",
+            "Final Fitness": f"{final_fit:.2e}" if final_fit > 0.0 else "0.00",
+            "Speed Ratio (SR_C/A)": f"{speed_ratio:.2f}",
         })
 
     if pd is not None:
