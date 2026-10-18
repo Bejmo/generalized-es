@@ -35,14 +35,14 @@ from src.runners import custom_es, isotropic_es, sep_cma_es, standard_cma_es
 
 # Baseline optimizers registry
 RUNNERS = {
-    'Prototype 1': custom_es.run,
+    'Generalized ES': custom_es.run,
     'Isotropic ES (Simple Self-Adaptive)': isotropic_es.run,
     'sep-CMA-ES (Separable CMA-ES)': sep_cma_es.run,
     'Standard CMA-ES (Upper Bound)': standard_cma_es.run,
 }
 
 CLEAN_NAMES = {
-    'Prototype 1': 'Prototype_1',
+    'Generalized ES': 'Generalized_ES',
     'Isotropic ES (Simple Self-Adaptive)': 'Isotropic_ES_Simple_Self_Adaptive',
     'sep-CMA-ES (Separable CMA-ES)': 'sep_CMA_ES_Separable_CMA_ES',
     'Standard CMA-ES (Upper Bound)': 'Standard_CMA_ES_Upper_Bound',
@@ -68,7 +68,7 @@ def run_all_experiments(
         for rname, runner in runners.items():
             traces = []
             for seed in seeds:
-                if rname == "Prototype 1":
+                if rname == "Generalized ES":
                     proto_config = ESConfig(
                         n_real=b_dim,
                         n_count=0,
@@ -146,8 +146,8 @@ def compute_wilcoxon_table_exp1(
     traces_path_or_results: str | Dict[str, Dict[str, np.ndarray]],
 ) -> List[Dict[str, Any]]:
     """
-    Compute paired two-sided Wilcoxon signed-rank tests for Table 5.1 of the TFG.
-    Proposed ES (Prototype 1) vs. [Isotropic ES, sep-CMA-ES, Full CMA-ES]
+    Compute paired two-sided Wilcoxon signed-rank tests for the TFG comparative results table.
+    Proposed ES (Generalized ES) vs. [Isotropic ES, sep-CMA-ES, Full CMA-ES]
     across the 4 benchmarks: Sphere, Rastrigin, Rosenbrock, Ackley.
     """
     if isinstance(traces_path_or_results, str):
@@ -168,7 +168,7 @@ def compute_wilcoxon_table_exp1(
 
     all_tests = []
     for bench in benchmarks:
-        prop_key = f"{bench}__Prototype_1"
+        prop_key = f"{bench}__Generalized_ES"
         if prop_key not in data:
             continue
         prop_finals = data[prop_key][:, -1]

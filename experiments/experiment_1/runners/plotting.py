@@ -6,17 +6,40 @@ Renders 3D loss surface alongside convergence trajectories.
 from __future__ import annotations
 
 import os
+import warnings
 from typing import Any, Dict, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
+warnings.filterwarnings("ignore", message=".*Axes that are not compatible with tight_layout.*")
+
 COLORS = {
-    'Prototype 1': '#E63946',
+    'Generalized ES': '#E63946',
+    'Generalized ES (GES)': '#E63946',
     'Isotropic ES (Simple Self-Adaptive)': '#E9C46A',
     'sep-CMA-ES (Separable CMA-ES)': '#2A9D8F',
     'Standard CMA-ES (Upper Bound)': '#457B9D',
 }
+
+LABEL_DISPLAY_MAP = {
+    'Generalized_ES': 'Generalized ES',
+}
+
+
+def _safe_savefig(fig: plt.Figure, path: str, **kwargs) -> None:
+    """Save figure with retries and graceful fallback to handle Windows file locks."""
+    import time
+    for attempt in range(5):
+        try:
+            fig.savefig(path, **kwargs)
+            print(f"Saved figure: {path}")
+            return
+        except OSError as e:
+            if attempt == 4:
+                print(f"Warning: Could not overwrite '{path}' due to Windows file lock ({e}). Figure is displayed in notebook.")
+                return
+            time.sleep(0.3)
 
 
 def plot_benchmark_summary(
@@ -84,13 +107,14 @@ def plot_benchmark_summary(
     # 2. Right Panel: Convergence Trajectories
     evals = np.arange(1, max_evals + 1)
     for rname, traces in data.items():
+        disp_name = LABEL_DISPLAY_MAP.get(rname, rname)
         median = np.median(traces, axis=0)
         q25 = np.percentile(traces, 25, axis=0)
         q75 = np.percentile(traces, 75, axis=0)
 
-        color = COLORS.get(rname, '#888888')
+        color = COLORS.get(disp_name, COLORS.get(rname, '#888888'))
         ls = '--' if 'Upper Bound' in rname else '-'
-        ax_conv.plot(evals, median, label=rname, color=color, linewidth=1.5, linestyle=ls)
+        ax_conv.plot(evals, median, label=disp_name, color=color, linewidth=1.5, linestyle=ls)
         ax_conv.fill_between(evals, q25, q75, alpha=0.15, color=color)
 
     ax_conv.set_yscale('log')
@@ -101,11 +125,13 @@ def plot_benchmark_summary(
     ax_conv.grid(True, alpha=0.3)
     ax_conv.tick_params(labelsize=8)
 
-    plt.tight_layout()
+    try:
+        plt.tight_layout()
+    except Exception:
+        pass
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=120, bbox_inches='tight')
-        print(f"Saved figure: {save_path}")
+        _safe_savefig(fig, save_path, dpi=120, bbox_inches='tight')
     if show:
         plt.show()
     return fig
