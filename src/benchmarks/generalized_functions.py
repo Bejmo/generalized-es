@@ -1,13 +1,13 @@
 """
 generalized_functions.py: Synthetic mixed-variable benchmark functions.
 
-Provides synthetic benchmark landscapes (Sphere, Rastrigin, Coupled) that test
+Provides synthetic benchmark landscapes (Sphere, Rastrigin, Coupled, Multiplicative) that test
 all 6 decision variable types co-evolving in the Generalized ES:
 - Real (continuous)
 - Count (integer)
 - Binary (boolean/logit)
 - Categorical (discrete categories)
-- Fuzzy (triangular membership control points a <= b <= c)
+- Fuzzy (triangular membership center-dispersion pairs (m, d))
 - Circular (closed-order positions 0..k-1)
 """
 
@@ -215,6 +215,64 @@ def generalized_coupled(
     return cost_real + cost_count + cost_cat + binary_penalty + cost_fuzzy + cost_circ
 
 
+# -----------------------------------------------------------------------------
+# 4. Generalized Multiplicative Benchmark
+# -----------------------------------------------------------------------------
+
+def generalized_multiplicative(
+    x_or_ind: Individual | NDArray[np.float64],
+    config: ESConfig | None = None,
+    targets: dict[str, Any] | None = None,
+) -> float:
+    """
+    Multiplicative mixed-variable landscape across all 6 variable types:
+        f_mult(x) = (1 + c_real) * (1 + c_count) * (1 + c_binary) * (1 + c_cat) * (1 + c_fuzzy) * (1 + c_circ) - 1.0
+
+    Introduces high-order non-linear epistasis between heterogeneous domains,
+    guaranteeing global minimum 0.0 only when all variables match target optima.
+    """
+    cfg = config if config is not None else DEFAULT_CONFIG
+    t = targets if targets is not None else get_default_targets(cfg)
+    u = unpack_genome(x_or_ind, cfg)
+
+    # 1. Real: sum of squared errors
+    cost_real = float(np.sum((u.real - t["real"]) ** 2)) if cfg.n_real > 0 else 0.0
+
+    # 2. Count: sum of squared integer differences
+    cost_count = float(np.sum((u.count - t["count"]) ** 2)) if cfg.n_count > 0 else 0.0
+
+    # 3. Binary: Hamming distance
+    cost_binary = float(np.sum(u.binary != t["binary"])) if cfg.n_binary > 0 else 0.0
+
+    # 4. Categorical: Misclassification count
+    cost_cat = float(np.sum(u.categorical != t["categorical"])) if cfg.n_categorical > 0 else 0.0
+
+    # 5. Fuzzy: Canonical center-dispersion squared distance
+    cost_fuzzy = 0.0
+    if cfg.n_fuzzy > 0:
+        m1, d1 = u.fuzzy[0::2], u.fuzzy[1::2]
+        m2, d2 = t["fuzzy"][0::2], t["fuzzy"][1::2]
+        cost_fuzzy = float(3.0 * np.sum((m1 - m2) ** 2) + 2.0 * np.sum((d1 - d2) ** 2))
+
+    # 6. Circular: Shortest modular distance on circle
+    cost_circ = 0.0
+    if cfg.n_circular > 0:
+        k = t["circular_k"]
+        diff = np.abs(u.circular - t["circular"]) % k
+        circular_dist = np.minimum(diff, k - diff)
+        cost_circ = float(np.sum(circular_dist ** 2))
+
+    product = (
+        (1.0 + cost_real)
+        * (1.0 + cost_count)
+        * (1.0 + cost_binary)
+        * (1.0 + cost_cat)
+        * (1.0 + cost_fuzzy)
+        * (1.0 + cost_circ)
+    )
+    return float(product - 1.0)
+
+
 # Dictionary exposing benchmarks
 GENERALIZED_BENCHMARKS = {
     "Generalized_Sphere": {
@@ -229,4 +287,9 @@ GENERALIZED_BENCHMARKS = {
         "fn": generalized_coupled,
         "description": "Coupled mixed-variable benchmark with discrete regime switches",
     },
+    "Generalized_Multiplicative": {
+        "fn": generalized_multiplicative,
+        "description": "Multiplicative non-linear mixed-variable benchmark across all 6 variable types",
+    },
 }
+

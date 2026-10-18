@@ -137,7 +137,7 @@ def run_benchmarks(dim: int = 10, max_evals: int = 10_000, n_seeds: int = 10) ->
         for rname, runner in RUNNERS.items():
             traces = []
             for seed in seeds:
-                if rname in ("GeneralizedES", "Prototype 1"):
+                if rname in ("GeneralizedES", "Generalized ES"):
                     proto_config = ESConfig(
                         n_real=b_dim,
                         n_count=0,
