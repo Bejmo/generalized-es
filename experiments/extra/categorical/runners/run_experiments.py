@@ -382,9 +382,9 @@ def run_study_1(data_dir: str, figures_dir: str) -> Dict:
         ax.plot(mean_tr_leg, label="Legacy Softmax", color="#d95f02", lw=2, linestyle="--")
         ax.plot(mean_tr_new, label="New Jump (Unified)", color="#1b9e77", lw=2)
         ax.set_title(b["name"].split(" (")[0], fontsize=11, fontweight="bold")
-        ax.set_xlabel("Generación", fontsize=10)
+        ax.set_xlabel("Generation", fontsize=10)
         if idx == 0:
-            ax.set_ylabel("Pérdida media f(x)", fontsize=10)
+            ax.set_ylabel(r"Mean Loss $f(x)$", fontsize=10)
             ax.legend(loc="upper right", fontsize=9)
         ax.grid(True, alpha=0.3)
 
@@ -491,7 +491,7 @@ def run_study_2(data_dir: str, figures_dir: str) -> Dict:
     fig, ax = plt.subplots(figsize=(6, 5))
     box = ax.boxplot(
         [arr_bin, arr_cat],
-        tick_labels=["Binaria (XOR)", "Categórica (K=2)"],
+        tick_labels=["Binary (XOR)", "Categorical ($K=2$)"],
         patch_artist=True,
         widths=0.4,
     )
@@ -500,8 +500,8 @@ def run_study_2(data_dir: str, figures_dir: str) -> Dict:
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
 
-    ax.set_ylabel("Pérdida final f(x) (32 variables)", fontsize=11)
-    ax.set_title(f"Comparativa de Equivalencia (50 Semillas)\nWilcoxon p = {w_p:.4f} (p > 0.05)", fontsize=12, fontweight="bold")
+    ax.set_ylabel(r"Final Loss $f(x)$ (32 variables)", fontsize=11)
+    ax.set_title(f"Equivalence Comparison (50 Seeds)\nWilcoxon p = {w_p:.4f} (p > 0.05)", fontsize=12, fontweight="bold")
     ax.grid(True, alpha=0.3, axis="y")
 
     plt.tight_layout()

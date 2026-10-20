@@ -176,7 +176,7 @@ def main() -> None:
     # Save to data directory
     out_dir = Path(__file__).resolve().parent.parent / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "factorial_study_data.json"
+    out_path = out_dir / "factorial_study_results.json"
     out_npz = out_dir / "factorial_study_data.npz"
 
     with open(out_path, "w", encoding="utf-8") as f:
